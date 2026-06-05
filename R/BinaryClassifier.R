@@ -189,7 +189,11 @@ BinaryClassifier <- R6::R6Class(
       p_pss  <- plot_metric_curve(toc_metric_curve(td, pss,   "PSS"),   "PSS")
       p_hss  <- plot_metric_curve(toc_metric_curve(td, hss,   "HSS"),   "HSS")
 
-      (p_oa + p_ba + p_mcc + p_kap) / (p_fom + p_gss + p_pss + p_hss) +
+      patchwork::wrap_plots(
+        p_oa, p_ba, p_mcc, p_kap,
+        p_fom, p_gss, p_pss, p_hss,
+        ncol = 4
+      ) +
         patchwork::plot_annotation(
           title    = sprintf("Metric profiles — %s", private$.name),
           subtitle = sprintf(

@@ -10,8 +10,9 @@ test_that("toc_data constructs correctly", {
 })
 
 test_that("toc_data rejects invalid hits_vector", {
-  expect_error(toc_data(c(1, 0, 1), 1, 1))  # not non-decreasing
-  expect_error(toc_data(c(0, 1, 1), 1, 1))  # wrong length
+  expect_error(toc_data(c(1, 0, 1), 1, 1))   # not non-decreasing (diff = -1)
+  expect_error(toc_data(c(0, 1),    1, 1))    # wrong length (need N+1 = 3)
+  expect_error(toc_data(c(0, 1, 3), 1, 1))   # last element 3 != n_positive 1
 })
 
 test_that("toc_from_scores produces valid toc_data", {

@@ -85,6 +85,11 @@ test_that("perfect classifier has FOM = OA = 1", {
 })
 
 test_that("metrics accept raw arguments", {
-  expect_equal(fom(28, 72, 23), 28 / (28 + 72 + 23))
-  expect_equal(oa(28, 72, 23, 2680), (28 + 2680) / 2803, tolerance = 1e-9)
+  # FOM, F1, sensitivity do not require cr
+  expect_equal(fom(28, 72, 23),       28 / (28 + 72 + 23))
+  expect_equal(f1_score(28, 72, 23),  2 * 28 / ((28 + 23) + 28 + 72))
+  expect_equal(sensitivity(28, fa = NULL, misses = 23), 28 / (28 + 23))
+  # Metrics requiring all 4 cells
+  expect_equal(oa(28, 72, 23, 2680),  (28 + 2680) / 2803, tolerance = 1e-9)
+  expect_equal(gss(28, 72, 23, 2680), gss(confusion_matrix(28, 72, 23, 2680)))
 })

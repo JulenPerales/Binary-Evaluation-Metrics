@@ -65,13 +65,16 @@ launch_threshold_explorer <- function(toc, ...) {
 
   server <- function(input, output, session) {
     cm_reactive <- shiny::reactive({
-      k   <- input$k
-      row <- toc[toc$k == k, , drop = FALSE]
-      confusion_matrix(row$hits, row$fa, row$misses, row$cr)
+      k   <- as.integer(round(input$k))
+      idx <- which(toc$k == k)
+      if (length(idx) != 1) return(NULL)
+      row <- toc[idx, , drop = FALSE]
+      confusion_matrix(row$hits[[1]], row$fa[[1]], row$misses[[1]], row$cr[[1]])
     })
 
     output$cm_table <- shiny::renderTable({
       cm <- cm_reactive()
+      shiny::req(cm)
       data.frame(
         ` `      = c("Predicted +", "Predicted -"),
         `Obs +`  = c(cm$hits,   cm$misses),
@@ -82,6 +85,7 @@ launch_threshold_explorer <- function(toc, ...) {
 
     output$agreement_table <- shiny::renderTable({
       cm <- cm_reactive()
+      shiny::req(cm)
       data.frame(
         Metric = c("OA", "BA", "MCC", "Kappa", "F1"),
         Value  = round(c(oa(cm), ba(cm), mcc(cm), kappa_score(cm), f1_score(cm)), 4)
@@ -90,6 +94,7 @@ launch_threshold_explorer <- function(toc, ...) {
 
     output$skill_table <- shiny::renderTable({
       cm <- cm_reactive()
+      shiny::req(cm)
       data.frame(
         Metric = c("FOM/CSI", "GSS", "PSS", "HSS"),
         Value  = round(c(fom(cm), gss(cm), pss(cm), hss(cm)), 4)
