@@ -1,0 +1,41 @@
+Package: binmetrics
+Type: Package
+Title: Binary Classification Evaluation Metrics with Threshold Analysis
+Version: 0.1.0
+Authors@R:
+    person("Julen", "Perales", email = "julen.perales@unavarra.es",
+           role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0000-0000-0000"))
+Description: Tools for computing, comparing, and visualising binary classification
+    evaluation metrics across the full range of decision thresholds. Implements
+    agreement metrics (OA, BA, MCC, Kappa, F1) and skill metrics (FOM/CSI, GSS,
+    PSS, ETS, HSS) together with their theoretical upper and lower bounds.
+    Provides integrated metrics (AFOM, AUFOM, DFOM, DAUC) based on area ratios
+    over the Threshold Operating Characteristic (TOC) space. Includes a
+    publication-quality ggplot2 visualisation layer and interactive Shiny
+    applications for pedagogical exploration of threshold effects.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.2
+Imports:
+    R6,
+    ggplot2 (>= 3.4.0),
+    dplyr (>= 1.1.0),
+    tibble (>= 3.2.0),
+    tidyr (>= 1.3.0),
+    pracma (>= 2.4.0),
+    patchwork (>= 1.2.0),
+    scales (>= 1.3.0),
+    rlang (>= 1.1.0)
+Suggests:
+    shiny (>= 1.8.0),
+    shinythemes,
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown,
+    withr
+Config/testthat/edition: 3
+VignetteBuilder: knitr
+URL: https://github.com/julenperales/binary-evaluation-metrics
+BugReports: https://github.com/julenperales/binary-evaluation-metrics/issues

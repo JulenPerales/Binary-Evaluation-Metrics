@@ -1,0 +1,176 @@
+---
+title: "Getting Started with binmetrics"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with binmetrics}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  fig.width  = 7,
+  fig.height = 4.5,
+  dpi = 100
+)
+```
+
+```{r setup}
+library(binmetrics)
+```
+
+## Overview
+
+**binmetrics** evaluates binary classifiers through the full range of decision
+thresholds, not just at a single operating point. The package centres on the
+**Threshold Operating Characteristic (TOC)** space, which represents classifier
+performance as a function of the number of predicted positives $k$.
+
+Two families of metrics are distinguished:
+
+- **Agreement metrics** (OA, BA, MCC, Kappa, F1): compare predictions to
+  observations with no notion of a "baseline".
+- **Skill metrics** (FOM/CSI, GSS, PSS, HSS): measure improvement over a
+  random or uninformative classifier.
+
+---
+
+## 1. Single-threshold analysis
+
+The simplest entry point is a confusion matrix at a fixed threshold.
+
+```{r single-threshold}
+# Finley (1884) tornado forecasting data
+cm <- confusion_matrix(hits = 28, fa = 72, misses = 23, cr = 2680)
+print(cm)
+```
+
+```{r single-threshold-summary}
+summary(cm)
+```
+
+You can call any metric function directly:
+
+```{r single-metrics}
+fom(cm)           # Figure of Merit / CSI
+gss(cm)           # Gilbert Skill Score (= ETS)
+pss(cm)           # Peirce Skill Score
+all_metrics(cm)   # all at once
+```
+
+---
+
+## 2. Full threshold analysis — TOC data
+
+The key object in **binmetrics** is the `toc_data` tibble, which enumerates
+the classifier's performance at every possible threshold rank.
+
+### From classifier scores
+
+```{r toc-from-scores}
+set.seed(42)
+n      <- 1000
+scores <- runif(n)
+obs    <- scores > 0.5 + rnorm(n, sd = 0.25)
+
+td <- toc_from_scores(scores, obs)
+td
+```
+
+### TOC plot
+
+```{r plot-toc}
+plot_toc(td)
+```
+
+### ROC plot
+
+```{r plot-roc}
+plot_roc(td)
+```
+
+### FOM curve with theoretical bounds
+
+The FOM curve is shown alongside the **upper bound** (best possible classifier
+with the same hit counts), the **lower bound** (worst-case ranking), and the
+**random classifier** baseline.
+
+```{r plot-fom}
+plot_fom(td)
+```
+
+The annotated values are:
+
+- **AFOM**: area under FOM curve normalised by the upper–lower band area.
+- **DFOM**: FOM skill — improvement of AFOM over the random baseline.
+- **MFOM**: maximum FOM across all thresholds.
+
+### Any metric with its bounds
+
+```{r plot-metric}
+# GSS curve with bounds
+mc <- toc_metric_curve(td, gss, "GSS")
+plot_metric_curve(mc, "GSS")
+```
+
+---
+
+## 3. Integrated metrics
+
+```{r integrated}
+integrated_metrics(td)
+```
+
+| Metric | Meaning |
+|--------|---------|
+| MFOM   | Maximum FOM across all thresholds |
+| AFOM   | Area-normalised integrated FOM |
+| AUFOM  | AFOM of a random classifier (baseline) |
+| DFOM   | FOM skill = (AFOM - AUFOM) / (1 - AUFOM) |
+| AUC    | Area under ROC curve |
+| DAUC   | AUC skill = 2*(AUC - 0.5) |
+| AUCPRC | Area under Precision-Recall curve |
+
+---
+
+## 4. Object-oriented API
+
+The `BinaryClassifier` R6 class bundles the full workflow.
+
+```{r oo-api}
+clf <- BinaryClassifier$new(scores, obs, name = "Demo Classifier")
+clf$summary()
+```
+
+```{r oo-plots, eval=FALSE}
+clf$plot_toc()
+clf$plot_fom()
+clf$plot_roc()
+clf$plot_all_metrics()   # patchwork panel of all 8 standard metrics
+```
+
+---
+
+## 5. Comparing classifiers
+
+```{r compare}
+set.seed(1)
+clf_a <- toc_from_scores(runif(500), runif(500) > 0.4)
+clf_b <- toc_from_scores(runif(500), runif(500) > 0.5)
+
+compare_classifiers(list(A = clf_a, B = clf_b), type = "roc")
+```
+
+---
+
+## 6. Interactive apps
+
+```{r shiny, eval=FALSE}
+# Threshold slider: move k and watch metrics update live
+launch_threshold_explorer(td)
+
+# Explore the feasible region of AUC and AFOM for different prevalences
+launch_bounds_explorer()
+```
