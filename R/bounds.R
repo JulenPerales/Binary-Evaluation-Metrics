@@ -53,15 +53,15 @@ hits_random <- function(k, prevalence) {
 }
 
 # ---------------------------------------------------------------------------
-# FOM bounds (metric values) ----
+# CSI bounds (metric values) ----
 # ---------------------------------------------------------------------------
 
-#' Upper Bound FOM at Threshold k
+#' Upper Bound for CSI (Critical Success Index) at Threshold k
 #'
-#' The maximum achievable FOM at threshold `k` is achieved when all predicted
+#' The maximum achievable CSI at threshold `k` is achieved when all predicted
 #' positives that can be Hits are Hits:
-#' - `k <= P`: `FOM_upper = k / P`
-#' - `k >  P`: `FOM_upper = P / k`
+#' - `k <= P`: `CSI_upper = k / P`
+#' - `k >  P`: `CSI_upper = P / k`
 #'
 #' Equivalently: `min(k, P) / (P + max(0, k - P))`.
 #'
@@ -69,11 +69,11 @@ hits_random <- function(k, prevalence) {
 #' @param n_positive Integer. Total positives (P).
 #' @param n_negative Integer. Total negatives (Q). Not used in this bound but
 #'   included for interface consistency.
-#' @return Numeric vector of upper-bound FOM values in \[0, 1\].
+#' @return Numeric vector of upper-bound CSI values in \[0, 1\].
 #' @export
 #' @examples
-#' fom_upper(0:100, n_positive = 30, n_negative = 70)
-fom_upper <- function(k, n_positive, n_negative) {
+#' csi_upper_bound(0:100, n_positive = 30, n_negative = 70)
+csi_upper_bound <- function(k, n_positive, n_negative) {
   H  <- hits_upper(k, n_positive)
   FA <- pmax(0, k - n_positive)
   M  <- n_positive - H
@@ -81,20 +81,33 @@ fom_upper <- function(k, n_positive, n_negative) {
   ifelse(denom == 0, 0, H / denom)
 }
 
-#' Lower Bound FOM at Threshold k
+#' Upper Bound FOM at Threshold k (Deprecated)
 #'
-#' The minimum achievable FOM at threshold `k` is:
-#' - `k <= Q`: `FOM_lower = 0`
-#' - `k >  Q`: `FOM_lower = (k - Q) / N`
+#' Alias for [csi_upper_bound()]. Use the new name for clarity.
+#'
+#' @inheritParams csi_upper_bound
+#' @return Numeric vector of upper-bound CSI/FOM values in \[0, 1\].
+#' @export
+#' @examples
+#' fom_upper(0:100, n_positive = 30, n_negative = 70)
+fom_upper <- function(k, n_positive, n_negative) {
+  csi_upper_bound(k, n_positive, n_negative)
+}
+
+#' Lower Bound for CSI (Critical Success Index) at Threshold k
+#'
+#' The minimum achievable CSI at threshold `k` is:
+#' - `k <= Q`: `CSI_lower = 0`
+#' - `k >  Q`: `CSI_lower = (k - Q) / N`
 #'
 #' @param k Integer vector. Number of predicted positives.
 #' @param n_positive Integer. Total positives (P).
 #' @param n_negative Integer. Total negatives (Q).
-#' @return Numeric vector of lower-bound FOM values in \[0, 1\].
+#' @return Numeric vector of lower-bound CSI values in \[0, 1\].
 #' @export
 #' @examples
-#' fom_lower(0:100, n_positive = 30, n_negative = 70)
-fom_lower <- function(k, n_positive, n_negative) {
+#' csi_lower_bound(0:100, n_positive = 30, n_negative = 70)
+csi_lower_bound <- function(k, n_positive, n_negative) {
   H  <- hits_lower(k, n_positive, n_negative)
   FA <- k - H
   M  <- n_positive - H
@@ -102,27 +115,54 @@ fom_lower <- function(k, n_positive, n_negative) {
   ifelse(denom == 0, 0, H / denom)
 }
 
-#' Random Classifier FOM at Threshold k
+#' Lower Bound FOM at Threshold k (Deprecated)
 #'
-#' FOM of a classifier with no discrimination (`AUC = 0.5`), which assigns
-#' probabilities uniformly.
-#' `FOM_random = (k * prevalence) / (k + P*(1 - prevalence))
-#'             = k*P/N / (k + P - k*P/N)`
+#' Alias for [csi_lower_bound()]. Use the new name for clarity.
+#'
+#' @inheritParams csi_lower_bound
+#' @return Numeric vector of lower-bound CSI/FOM values in \[0, 1\].
+#' @export
+#' @examples
+#' fom_lower(0:100, n_positive = 30, n_negative = 70)
+fom_lower <- function(k, n_positive, n_negative) {
+  csi_lower_bound(k, n_positive, n_negative)
+}
+
+#' Baseline (Random Classifier) CSI at Threshold k
+#'
+#' CSI of a classifier with no discrimination (`AUC = 0.5`), which assigns
+#' probabilities uniformly. This is the AUCSI baseline used in the CSI
+#' framework.
+#' `CSI_baseline = (k * prevalence) / (k + P*(1 - prevalence))
+#'              = k*P/N / (k + P - k*P/N)`
 #'
 #' @param k Integer vector. Number of predicted positives.
 #' @param n_positive Integer. Total positives (P).
 #' @param n_negative Integer. Total negatives (Q).
-#' @return Numeric vector of random-classifier FOM values.
+#' @return Numeric vector of random-classifier CSI values.
 #' @export
 #' @examples
-#' fom_random(0:100, n_positive = 30, n_negative = 70)
-fom_random <- function(k, n_positive, n_negative) {
+#' csi_baseline_bound(0:100, n_positive = 30, n_negative = 70)
+csi_baseline_bound <- function(k, n_positive, n_negative) {
   N <- n_positive + n_negative
   H <- hits_random(k, n_positive / N)   # k * prevalence
   FA <- k - H
   M  <- n_positive - H
   denom <- H + FA + M
   ifelse(denom == 0, 0, H / denom)
+}
+
+#' Random Classifier FOM at Threshold k (Deprecated)
+#'
+#' Alias for [csi_baseline_bound()]. Use the new name for clarity.
+#'
+#' @inheritParams csi_baseline_bound
+#' @return Numeric vector of random-classifier CSI/FOM values.
+#' @export
+#' @examples
+#' fom_random(0:100, n_positive = 30, n_negative = 70)
+fom_random <- function(k, n_positive, n_negative) {
+  csi_baseline_bound(k, n_positive, n_negative)
 }
 
 # ---------------------------------------------------------------------------

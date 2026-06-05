@@ -22,7 +22,7 @@
 #'     \item `k` — threshold rank (predicted positives count)
 #'     \item `hits`, `fa`, `misses`, `cr` — confusion matrix cells
 #'     \item `hits_upper`, `hits_lower`, `hits_random` — bound hit counts
-#'     \item `fom_curve`, `fom_upper`, `fom_lower`, `fom_random` — FOM values
+#'     \item `csi`, `csi_upper`, `csi_lower`, `csi_baseline` — CSI values
 #'     \item `tpr`, `fpr` — True and False Positive Rates (for ROC)
 #'   }
 #'
@@ -50,31 +50,39 @@ toc_data <- function(hits_vector, n_positive, n_negative) {
   M  <- n_positive - H
   CR <- n_negative - FA
 
-  tibble::tibble(
-    k           = k,
-    hits        = H,
-    fa          = FA,
-    misses      = M,
-    cr          = CR,
+  toc <- tibble::tibble(
+    k            = k,
+    hits         = H,
+    fa           = FA,
+    misses       = M,
+    cr           = CR,
     # TOC bounds (hit counts)
-    hits_upper  = hits_upper(k, n_positive),
-    hits_lower  = hits_lower(k, n_positive, n_negative),
-    hits_random = hits_random(k, n_positive / N),
-    # FOM metric curves
-    fom_curve   = .safe_fom(H,                          k, n_positive),
-    fom_upper   = .safe_fom(hits_upper(k, n_positive),  k, n_positive),
-    fom_lower   = .safe_fom(hits_lower(k, n_positive, n_negative), k, n_positive),
-    fom_random  = .safe_fom(hits_random(k, n_positive / N),        k, n_positive),
+    hits_upper   = hits_upper(k, n_positive),
+    hits_lower   = hits_lower(k, n_positive, n_negative),
+    hits_random  = hits_random(k, n_positive / N),
+    # CSI metric curves (dissertation names)
+    csi          = .safe_fom(H,                          k, n_positive),
+    csi_upper    = .safe_fom(hits_upper(k, n_positive),  k, n_positive),
+    csi_lower    = .safe_fom(hits_lower(k, n_positive, n_negative), k, n_positive),
+    csi_baseline = .safe_fom(hits_random(k, n_positive / N),        k, n_positive),
     # ROC coordinates
-    tpr         = H / n_positive,
-    fpr         = FA / n_negative
-  ) |>
-    structure(
-      class      = c("toc_data", "tbl_df", "tbl", "data.frame"),
-      n_positive = n_positive,
-      n_negative = n_negative,
-      n_total    = N
-    )
+    tpr          = H / n_positive,
+    fpr          = FA / n_negative
+  )
+
+  # Backward-compatible aliases (deprecated column names)
+  toc$fom_curve  <- toc$csi
+  toc$fom_upper  <- toc$csi_upper
+  toc$fom_lower  <- toc$csi_lower
+  toc$fom_random <- toc$csi_baseline
+
+  structure(
+    toc,
+    class      = c("toc_data", "tbl_df", "tbl", "data.frame"),
+    n_positive = n_positive,
+    n_negative = n_negative,
+    n_total    = N
+  )
 }
 
 #' Build TOC Dataset from Score Vector

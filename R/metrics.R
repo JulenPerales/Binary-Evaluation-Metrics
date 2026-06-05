@@ -49,8 +49,9 @@ ba <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
 
 #' Matthews Correlation Coefficient (MCC)
 #'
-#' Balanced metric that accounts for all four cells of the confusion matrix.
-#' Equivalent to the Pearson correlation between observed and predicted.
+#' Balanced **Skill** metric that accounts for all four cells of the confusion
+#' matrix. Equivalent to the Pearson correlation between observed and predicted.
+#' The dissertation explicitly classifies MCC as a Skill metric.
 #'
 #' @inheritParams oa
 #' @return Numeric scalar in \[-1, 1\].
@@ -70,7 +71,9 @@ mcc <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
 
 #' Cohen's Kappa
 #'
-#' Chance-corrected agreement metric.
+#' For binary classification, Cohen's Kappa equals the Heidke Skill Score (HSS).
+#' The dissertation (CSI Framework) criticizes the use of Kappa in rare event
+#' evaluation because it conflates agreement and skill concepts.
 #' `Kappa = (po - pe) / (1 - pe)`.
 #'
 #' @inheritParams oa
@@ -145,27 +148,31 @@ f_beta <- function(hits, fa = NULL, misses = NULL, cr = NULL, beta = 1) {
 }
 
 # ---------------------------------------------------------------------------
-# Skill metrics ----
+# Agreement metrics (continued): CSI and related ----
 # ---------------------------------------------------------------------------
 
-#' Figure of Merit (FOM) / Critical Success Index (CSI)
+#' Critical Success Index (CSI) / Figure of Merit (FOM) / Threat Score
 #'
-#' Fraction of events that were correctly forecast, out of all that were either
-#' observed or forecast (or both). Also known as the Jaccard similarity
-#' coefficient.
-#' `FOM = TP / (TP + FP + FN)`
+#' An **Agreement** metric. Fraction of events that were correctly forecast,
+#' out of all that were either observed or forecast (or both). Also known as
+#' the Jaccard similarity coefficient or Threat Score.
+#' `CSI = TP / (TP + FP + FN)`
+#'
+#' This is the central metric of the CSI Framework (dissertation). Note that
+#' despite its name, CSI is classified as an **Agreement** metric (not Skill)
+#' because it does not correct for chance.
 #'
 #' @param hits A `confusion_matrix` object, **or** the TP (Hits) count.
 #' @param fa FP (False Alarms) count; ignored when `hits` is a `confusion_matrix`.
 #' @param misses FN (Misses) count.
-#' @param cr TN (Correct Rejections) count. **Not required for FOM** — omit
+#' @param cr TN (Correct Rejections) count. **Not required for CSI** — omit
 #'   when passing raw counts.
 #' @return Numeric scalar in \[0, 1\].
 #' @export
 #' @examples
-#' fom(confusion_matrix(28, 72, 23, 2680))
-#' fom(28, 72, 23)   # cr not needed for FOM
-fom <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
+#' csi(confusion_matrix(28, 72, 23, 2680))
+#' csi(28, 72, 23)   # cr not needed for CSI
+csi <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
   if (inherits(hits, "confusion_matrix")) {
     cm    <- hits
     denom <- cm$hits + cm$fa + cm$misses
@@ -175,6 +182,96 @@ fom <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
   denom <- hits + fa + misses
   ifelse(denom == 0, NA_real_, hits / denom)
 }
+
+#' Figure of Merit (FOM) — Alias for CSI
+#'
+#' Alias for [csi()]. Kept for backward compatibility.
+#' `FOM = CSI = TP / (TP + FP + FN)`
+#'
+#' @inheritParams csi
+#' @return Numeric scalar in \[0, 1\].
+#' @export
+#' @examples
+#' fom(confusion_matrix(28, 72, 23, 2680))
+#' fom(28, 72, 23)
+fom <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
+  csi(hits, fa, misses, cr)
+}
+
+#' User's Accuracy (UA) / Precision / Positive Predictive Value
+#'
+#' An **Agreement** metric. Fraction of predicted positives that are true
+#' positives. Corresponds to User's Accuracy in the remote sensing literature.
+#' `UA = TP / (TP + FP)`
+#'
+#' @param hits A `confusion_matrix` object, **or** the TP (Hits) count.
+#' @param fa FP (False Alarms) count; ignored when `hits` is a `confusion_matrix`.
+#' @param misses FN (Misses) count. Not required.
+#' @param cr TN (Correct Rejections) count. Not required.
+#' @return Numeric scalar in \[0, 1\].
+#' @export
+#' @examples
+#' ua(confusion_matrix(28, 72, 23, 2680))
+#' ua(28, 72)
+ua <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
+  if (inherits(hits, "confusion_matrix")) {
+    cm    <- hits
+    denom <- cm$hits + cm$fa
+    return(ifelse(denom == 0, NA_real_, cm$hits / denom))
+  }
+  stopifnot(!is.null(fa))
+  denom <- hits + fa
+  ifelse(denom == 0, NA_real_, hits / denom)
+}
+
+#' False Alarm Rate (FAR) / False Positive Rate / POFD
+#'
+#' An **Agreement** metric. Fraction of observed negatives that were
+#' incorrectly predicted as positive. Also called False Positive Rate (FPR)
+#' or Probability of False Detection (POFD).
+#' `FAR = FP / (FP + TN) = F / (C + F)`
+#'
+#' Note: This is distinct from the False Alarm *Ratio* (= FP/(TP+FP)),
+#' which is available as [false_alarm_ratio()].
+#'
+#' @param hits A `confusion_matrix` object, **or** the TP (Hits) count.
+#' @param fa FP (False Alarms) count.
+#' @param misses FN (Misses) count. Not required.
+#' @param cr TN (Correct Rejections) count.
+#' @return Numeric scalar in \[0, 1\].
+#' @export
+#' @examples
+#' far(confusion_matrix(28, 72, 23, 2680))
+far <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
+  cm <- .parse_cm(hits, fa, misses, cr)
+  cm$fa / cm$n_negative
+}
+
+#' False Omission Rate (FOR)
+#'
+#' An **Agreement** metric. Fraction of predicted negatives that are
+#' actually positive (false omissions).
+#' `FOR = FN / (FN + TN) = M / (C + M)`
+#'
+#' The function is named `for_metric` because `for` is a reserved keyword in R.
+#'
+#' @param hits A `confusion_matrix` object, **or** the TP (Hits) count.
+#' @param fa FP (False Alarms) count.
+#' @param misses FN (Misses) count.
+#' @param cr TN (Correct Rejections) count.
+#' @return Numeric scalar in \[0, 1\].
+#' @export
+#' @examples
+#' for_metric(confusion_matrix(28, 72, 23, 2680))
+for_metric <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
+  cm    <- .parse_cm(hits, fa, misses, cr)
+  denom <- cm$misses + cm$cr
+  ifelse(denom == 0, NA_real_, cm$misses / denom)
+}
+
+# ---------------------------------------------------------------------------
+# Skill metrics ----
+# ---------------------------------------------------------------------------
 
 #' Gilbert Skill Score (GSS) / Equitable Threat Score (ETS)
 #'
