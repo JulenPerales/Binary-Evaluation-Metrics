@@ -24,9 +24,12 @@
 #' x   <- seq(0, 1, length.out = 101)
 #' area_ratio(x, y_curve = x^0.5, y_upper = rep(1, 101), y_base = x)
 area_ratio <- function(x, y_curve, y_upper, y_base) {
-  num <- pracma::trapz(x, pmax(0, y_curve - y_base))
-  den <- pracma::trapz(x, pmax(0, y_upper - y_base))
-  if (den == 0) return(NA_real_)
+  # Drop NAs consistently across all vectors before integrating
+  ok  <- complete.cases(x, y_curve, y_upper, y_base)
+  if (!any(ok)) return(NA_real_)
+  num <- pracma::trapz(x[ok], pmax(0, y_curve[ok] - y_base[ok]))
+  den <- pracma::trapz(x[ok], pmax(0, y_upper[ok] - y_base[ok]))
+  if (isTRUE(den == 0) || is.na(den)) return(NA_real_)
   num / den
 }
 

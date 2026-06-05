@@ -3,26 +3,28 @@
 # ---------------------------------------------------------------------------
 
 .curve_scale_colour <- function(classifier_name = "Classifier") {
+  col_vals  <- setNames(.BINM_COLOURS$classifier, classifier_name)
+  line_vals <- setNames("solid", classifier_name)
   list(
     ggplot2::scale_colour_manual(
       name   = "",
       values = c(
-        "Classifier"        = .BINM_COLOURS$classifier,
+        col_vals,
         "Upper Bound"       = .BINM_COLOURS$upper,
         "Lower Bound"       = .BINM_COLOURS$lower,
         "Random Classifier" = .BINM_COLOURS$random
       ),
-      breaks = c("Classifier", "Random Classifier", "Upper Bound", "Lower Bound")
+      breaks = c(classifier_name, "Random Classifier", "Upper Bound", "Lower Bound")
     ),
     ggplot2::scale_linetype_manual(
       name   = "",
       values = c(
-        "Classifier"        = "solid",
+        line_vals,
         "Upper Bound"       = "solid",
         "Lower Bound"       = "longdash",
         "Random Classifier" = "dotted"
       ),
-      breaks = c("Classifier", "Random Classifier", "Upper Bound", "Lower Bound")
+      breaks = c(classifier_name, "Random Classifier", "Upper Bound", "Lower Bound")
     )
   )
 }
@@ -56,13 +58,14 @@ plot_toc <- function(toc, classifier_name = "Classifier",
   sy <- if (percent) P else 1
 
   df <- tibble::tibble(
-    k          = toc$k / sc,
-    Classifier = toc$hits / sy,
+    k                   = toc$k / sc,
+    .clf                = toc$hits / sy,
     `Upper Bound`       = toc$hits_upper / sy,
     `Lower Bound`       = toc$hits_lower / sy,
     `Random Classifier` = toc$hits_random / sy
-  ) |>
-    tidyr::pivot_longer(-k, names_to = "curve", values_to = "hits")
+  )
+  names(df)[names(df) == ".clf"] <- classifier_name
+  df <- tidyr::pivot_longer(df, cols = -1L, names_to = "curve", values_to = "hits")
 
   xlab <- if (percent) "Predicted Positives (fraction of N)" else "Predicted Positives (k)"
   ylab <- if (percent) "Hits (fraction of P)"                else "Hits"
@@ -192,12 +195,13 @@ plot_fom <- function(toc, classifier_name = "Classifier", percent_x = TRUE) {
 
   df <- tibble::tibble(
     k                   = x_vals,
-    Classifier          = toc$fom_curve,
+    .clf                = toc$fom_curve,
     `Upper Bound`       = toc$fom_upper,
     `Lower Bound`       = toc$fom_lower,
     `Random Classifier` = toc$fom_random
-  ) |>
-    tidyr::pivot_longer(-k, names_to = "curve", values_to = "fom")
+  )
+  names(df)[names(df) == ".clf"] <- classifier_name
+  df <- tidyr::pivot_longer(df, cols = -1L, names_to = "curve", values_to = "fom")
 
   ar  <- area_ratio(x_vals, toc$fom_curve, toc$fom_upper, toc$fom_lower)
   dau <- dfom(toc)
@@ -321,11 +325,12 @@ plot_precision_recall <- function(toc, classifier_name = "Classifier") {
   precision <- ifelse(toc$k == 0, 1, toc$hits / toc$k)
 
   df <- tibble::tibble(
-    recall    = recall,
-    Classifier = precision,
-    Baseline   = pr
-  ) |>
-    tidyr::pivot_longer(-recall, names_to = "curve", values_to = "precision")
+    recall   = recall,
+    .clf     = precision,
+    Baseline = pr
+  )
+  names(df)[names(df) == ".clf"] <- classifier_name
+  df <- tidyr::pivot_longer(df, cols = -1L, names_to = "curve", values_to = "precision")
 
   aucprc <- auc_prc(toc)
   skill  <- prc_skill(toc)
@@ -337,17 +342,17 @@ plot_precision_recall <- function(toc, classifier_name = "Classifier") {
       name   = "",
       values = c(
         setNames(.BINM_COLOURS$classifier, classifier_name),
-        "Classifier" = .BINM_COLOURS$classifier,
-        "Baseline"   = .BINM_COLOURS$random
-      )
+        "Baseline" = .BINM_COLOURS$random
+      ),
+      breaks = c(classifier_name, "Baseline")
     ) +
     ggplot2::scale_linetype_manual(
       name   = "",
       values = c(
         setNames("solid", classifier_name),
-        "Classifier" = "solid",
-        "Baseline"   = "dotted"
-      )
+        "Baseline" = "dotted"
+      ),
+      breaks = c(classifier_name, "Baseline")
     ) +
     ggplot2::scale_x_continuous(expand = c(0, 0), limits = c(0, 1),
                                  labels = scales::percent) +

@@ -93,16 +93,24 @@ kappa_score <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
 #' Harmonic mean of precision and recall.
 #' `F1 = 2*TP / (2*TP + FP + FN) = 2*TP / (Predicted+ + Observed+)`.
 #'
-#' @inheritParams oa
+#' @param hits A `confusion_matrix` object or TP count.
+#' @param fa FP count.
+#' @param misses FN count.
+#' @param cr TN count. **Not required for F1** — omit when passing raw counts.
 #' @return Numeric scalar in \[0, 1\].
 #' @export
 #' @examples
 #' f1_score(confusion_matrix(28, 72, 23, 2680))
+#' f1_score(28, 72, 23)
 f1_score <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
-  cm    <- .parse_cm(hits, fa, misses, cr)
-  denom <- cm$n_positive + cm$hits + cm$fa
-  if (denom == 0) return(NA_real_)
-  2 * cm$hits / denom
+  if (inherits(hits, "confusion_matrix")) {
+    cm    <- hits
+    denom <- cm$n_positive + cm$hits + cm$fa
+    return(ifelse(denom == 0, NA_real_, 2 * cm$hits / denom))
+  }
+  stopifnot(!is.null(fa), !is.null(misses))
+  denom <- (hits + misses) + hits + fa   # P + TP + FP
+  ifelse(denom == 0, NA_real_, 2 * hits / denom)
 }
 
 #' F-beta Score
@@ -110,20 +118,30 @@ f1_score <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
 #' Generalised F score weighting recall `beta` times more than precision.
 #' `F_beta = (1 + beta^2) * TP / ((1 + beta^2)*TP + beta^2*FN + FP)`.
 #'
-#' @inheritParams oa
+#' @param hits A `confusion_matrix` object or TP count.
+#' @param fa FP count.
+#' @param misses FN count.
+#' @param cr TN count. **Not required for F-beta** — omit when passing raw counts.
 #' @param beta Positive numeric weight. `beta = 1` gives F1; `beta = 2`
 #'   weights recall twice as much.
 #' @return Numeric scalar in \[0, 1\].
 #' @export
 #' @examples
 #' f_beta(confusion_matrix(28, 72, 23, 2680), beta = 2)
+#' f_beta(28, 72, 23, beta = 2)
 f_beta <- function(hits, fa = NULL, misses = NULL, cr = NULL, beta = 1) {
-  cm    <- .parse_cm(hits, fa, misses, cr)
+  if (inherits(hits, "confusion_matrix")) {
+    cm    <- hits
+    b2    <- beta^2
+    num   <- (1 + b2) * cm$hits
+    denom <- num + b2 * cm$misses + cm$fa
+    return(ifelse(denom == 0, NA_real_, num / denom))
+  }
+  stopifnot(!is.null(fa), !is.null(misses))
   b2    <- beta^2
-  num   <- (1 + b2) * cm$hits
-  denom <- num + b2 * cm$misses + cm$fa
-  if (denom == 0) return(NA_real_)
-  num / denom
+  num   <- (1 + b2) * hits
+  denom <- num + b2 * misses + fa
+  ifelse(denom == 0, NA_real_, num / denom)
 }
 
 # ---------------------------------------------------------------------------
@@ -137,16 +155,25 @@ f_beta <- function(hits, fa = NULL, misses = NULL, cr = NULL, beta = 1) {
 #' coefficient.
 #' `FOM = TP / (TP + FP + FN)`
 #'
-#' @inheritParams oa
+#' @param hits A `confusion_matrix` object, **or** the TP (Hits) count.
+#' @param fa FP (False Alarms) count; ignored when `hits` is a `confusion_matrix`.
+#' @param misses FN (Misses) count.
+#' @param cr TN (Correct Rejections) count. **Not required for FOM** — omit
+#'   when passing raw counts.
 #' @return Numeric scalar in \[0, 1\].
 #' @export
 #' @examples
 #' fom(confusion_matrix(28, 72, 23, 2680))
+#' fom(28, 72, 23)   # cr not needed for FOM
 fom <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
-  cm    <- .parse_cm(hits, fa, misses, cr)
-  denom <- cm$hits + cm$fa + cm$misses
-  if (denom == 0) return(NA_real_)
-  cm$hits / denom
+  if (inherits(hits, "confusion_matrix")) {
+    cm    <- hits
+    denom <- cm$hits + cm$fa + cm$misses
+    return(ifelse(denom == 0, NA_real_, cm$hits / denom))
+  }
+  stopifnot(!is.null(fa), !is.null(misses))
+  denom <- hits + fa + misses
+  ifelse(denom == 0, NA_real_, hits / denom)
 }
 
 #' Gilbert Skill Score (GSS) / Equitable Threat Score (ETS)
@@ -222,12 +249,18 @@ ets_score <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
 #'
 #' `TPR = TP / (TP + FN)`
 #'
-#' @inheritParams oa
+#' @param hits A `confusion_matrix` object or TP count.
+#' @param fa FP count (ignored for this metric unless using a `confusion_matrix`).
+#' @param misses FN count.
+#' @param cr TN count. Not required.
 #' @return Numeric scalar in \[0, 1\].
 #' @export
 sensitivity <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
-  cm <- .parse_cm(hits, fa, misses, cr)
-  cm$hits / cm$n_positive
+  if (inherits(hits, "confusion_matrix")) {
+    cm <- hits; return(cm$hits / cm$n_positive)
+  }
+  stopifnot(!is.null(misses))
+  hits / (hits + misses)
 }
 
 #' True Negative Rate (Specificity)
@@ -259,14 +292,21 @@ false_positive_rate <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
 #' Fraction of positive predictions that were wrong.
 #' `FAR = FP / (TP + FP)`.
 #'
-#' @inheritParams oa
+#' @param hits A `confusion_matrix` object or TP count.
+#' @param fa FP count.
+#' @param misses FN count. Not required.
+#' @param cr TN count. Not required.
 #' @return Numeric scalar in \[0, 1\].
 #' @export
 false_alarm_ratio <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
-  cm    <- .parse_cm(hits, fa, misses, cr)
-  denom <- cm$hits + cm$fa
-  if (denom == 0) return(NA_real_)
-  cm$fa / denom
+  if (inherits(hits, "confusion_matrix")) {
+    cm    <- hits
+    denom <- cm$hits + cm$fa
+    return(ifelse(denom == 0, NA_real_, cm$fa / denom))
+  }
+  stopifnot(!is.null(fa))
+  denom <- hits + fa
+  ifelse(denom == 0, NA_real_, fa / denom)
 }
 
 # ---------------------------------------------------------------------------
