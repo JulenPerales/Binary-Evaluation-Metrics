@@ -1,0 +1,8 @@
+# R
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# PDF (dissertation lives on main branch, not needed on feature branches)
+*.pdf
