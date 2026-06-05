@@ -39,10 +39,16 @@ test_that("FOM equals CSI formula", {
   expect_equal(fom(cm), 28 / (28 + 72 + 23), tolerance = 1e-9)
 })
 
-test_that("GSS equals ETS", {
+test_that("GSS (Revised) matches dissertation formula", {
   cm <- confusion_matrix(28, 72, 23, 2680)
-  Hr  <- (28 + 72) * (28 + 23) / 2803
-  expected <- (28 - Hr) / (28 + 72 + 23 - Hr)
+  H <- 28; FA <- 72; M <- 23; CR <- 2680
+  k <- H + FA; P <- H + M; E <- H + FA + M + CR
+  H_rand <- k * P / E
+  F_rand <- k * (E - P) / E
+  M_rand <- P * (E - k) / E
+  csi_actual <- H / (H + FA + M)
+  csi_random <- H_rand / (H_rand + F_rand + M_rand)
+  expected   <- (csi_actual - csi_random) / (1 - csi_random)
   expect_equal(gss(cm), expected, tolerance = 1e-9)
   expect_equal(ets_score(cm), gss(cm))
 })
@@ -68,13 +74,25 @@ test_that("kappa_score is correct", {
   expect_equal(kappa_score(cm), (po - pe) / (1 - pe), tolerance = 1e-6)
 })
 
-test_that("all_metrics returns named vector", {
+test_that("all_metrics returns named vector with CSI Framework names", {
   cm  <- confusion_matrix(28, 72, 23, 2680)
   res <- all_metrics(cm)
   expect_true(is.numeric(res))
   expect_named(res)
-  expect_true("FOM" %in% names(res))
+  # CSI replaces FOM as the key name
+  expect_true("CSI" %in% names(res))
   expect_true("OA"  %in% names(res))
+  # Agreement metrics present
+  expect_true("PA"  %in% names(res))
+  expect_true("SP"  %in% names(res))
+  expect_true("UA"  %in% names(res))
+  expect_true("FAR" %in% names(res))
+  expect_true("FOR" %in% names(res))
+  # Skill metrics present
+  expect_true("GSS" %in% names(res))
+  expect_true("HSS" %in% names(res))
+  expect_true("PSS" %in% names(res))
+  expect_true("MCC" %in% names(res))
 })
 
 test_that("perfect classifier has FOM = OA = 1", {
@@ -92,4 +110,52 @@ test_that("metrics accept raw arguments", {
   # Metrics requiring all 4 cells
   expect_equal(oa(28, 72, 23, 2680),  (28 + 2680) / 2803, tolerance = 1e-9)
   expect_equal(gss(28, 72, 23, 2680), gss(confusion_matrix(28, 72, 23, 2680)))
+})
+
+test_that("UA (User's Accuracy / Precision) is correct", {
+  cm <- confusion_matrix(28, 72, 23, 2680)
+  expect_equal(ua(cm), 28 / (28 + 72), tolerance = 1e-9)
+  expect_equal(ua(28, 72), 28 / (28 + 72), tolerance = 1e-9)
+})
+
+test_that("PA (Producer's Accuracy / Sensitivity) is correct", {
+  cm <- confusion_matrix(28, 72, 23, 2680)
+  expect_equal(pa(cm), 28 / (28 + 23), tolerance = 1e-9)
+  expect_equal(sensitivity(cm), pa(cm))
+})
+
+test_that("SP (Specificity) is correct", {
+  cm <- confusion_matrix(28, 72, 23, 2680)
+  expect_equal(sp(cm), 2680 / (2680 + 72), tolerance = 1e-9)
+  expect_equal(specificity(cm), sp(cm))
+})
+
+test_that("FAR (False Alarm Rate = FPR) is correct", {
+  cm <- confusion_matrix(28, 72, 23, 2680)
+  # FAR = F / (C + F) = FP / (TN + FP)
+  expect_equal(far(cm), 72 / (2680 + 72), tolerance = 1e-9)
+  expect_equal(false_positive_rate(cm), far(cm))
+})
+
+test_that("FOR (False Omission Rate) is correct", {
+  cm <- confusion_matrix(28, 72, 23, 2680)
+  # FOR = M / (C + M) = FN / (TN + FN)
+  expect_equal(for_metric(cm), 23 / (2680 + 23), tolerance = 1e-9)
+})
+
+test_that("CSI is primary and fom() is alias", {
+  cm <- confusion_matrix(28, 72, 23, 2680)
+  expect_equal(csi(cm), 28 / (28 + 72 + 23), tolerance = 1e-9)
+  expect_equal(fom(cm), csi(cm))
+})
+
+test_that("Revised GSS is skill: 0 for random, 1 for perfect", {
+  # Perfect classifier: H=P, F=0, M=0
+  cm_perfect <- confusion_matrix(50, 0, 0, 50)
+  expect_equal(gss(cm_perfect), 1, tolerance = 1e-9)
+  # For the random case, CSI_actual == CSI_random, so GSS = 0
+  # Random: H_rand = k*P/N for k=P, H=H_rand=P^2/N
+  # Use k=P=50, N=100, so H_rand=25
+  cm_random <- confusion_matrix(25, 25, 25, 25)
+  expect_equal(gss(cm_random), 0, tolerance = 1e-6)
 })

@@ -34,58 +34,90 @@ area_ratio <- function(x, y_curve, y_upper, y_base) {
 }
 
 # ---------------------------------------------------------------------------
-# AFOM: Integrated FOM ----
+# AUCSI: Area Under the CSI Curve (= AFOM) ----
 # ---------------------------------------------------------------------------
 
-#' Integrated FOM (AFOM)
+#' Area Under the CSI Curve (AUCSI)
 #'
-#' Area under the FOM curve, normalised by the area between the FOM upper
-#' bound and the FOM lower bound (integrated over all thresholds k).
+#' Area under the CSI curve normalised by the feasible area (between the CSI
+#' upper bound and the CSI lower bound), integrated over all thresholds k.
+#' This is the primary integrated CSI metric from the dissertation.
 #'
-#' `AFOM = integral(FOM_curve - FOM_lower) / integral(FOM_upper - FOM_lower)`
+#' `AUCSI = integral(CSI_curve - CSI_lower) / integral(CSI_upper - CSI_lower)`
 #'
 #' @param toc A `toc_data` object from [toc_data()] or [toc_from_scores()].
 #' @return Numeric scalar in \[0, 1\].
 #' @export
-#' @seealso [aufom()], [dfom()]
+#' @seealso [aucsi_baseline()], [aucsis()]
+#' @examples
+#' set.seed(1)
+#' td <- toc_from_scores(runif(500), runif(500) > 0.4)
+#' aucsi(td)
+aucsi <- function(toc) {
+  stopifnot(inherits(toc, "toc_data"))
+  area_ratio(
+    x       = toc$k,
+    y_curve = toc$csi,
+    y_upper = toc$csi_upper,
+    y_base  = toc$csi_lower
+  )
+}
+
+#' Integrated FOM (AFOM) — Alias for AUCSI
+#'
+#' Alias for [aucsi()]. Kept for backward compatibility.
+#'
+#' @inheritParams aucsi
+#' @return Numeric scalar in \[0, 1\].
+#' @export
+#' @seealso [aucsi()]
 #' @examples
 #' set.seed(1)
 #' td <- toc_from_scores(runif(500), runif(500) > 0.4)
 #' afom(td)
 afom <- function(toc) {
-  stopifnot(inherits(toc, "toc_data"))
-  area_ratio(
-    x       = toc$k,
-    y_curve = toc$fom_curve,
-    y_upper = toc$fom_upper,
-    y_base  = toc$fom_lower
-  )
+  aucsi(toc)
 }
 
-#' Integrated FOM of a Uniform (Random) Classifier (AUFOM)
+#' AUCSI Baseline (Random Classifier) — AUCSI_baseline
 #'
-#' AFOM value that a random classifier with AUC = 0.5 would achieve.  Serves
-#' as the chance baseline for [dfom()].
+#' AUCSI value that a random classifier with AUC = 0.5 would achieve. Serves
+#' as the chance baseline for [aucsis()].
 #'
-#' `AUFOM = integral(FOM_random - FOM_lower) / integral(FOM_upper - FOM_lower)`
+#' `AUCSI_baseline = integral(CSI_baseline - CSI_lower) / integral(CSI_upper - CSI_lower)`
 #'
 #' @param toc A `toc_data` object.
 #' @return Numeric scalar in \[0, 1\].
 #' @export
-aufom <- function(toc) {
+#' @examples
+#' set.seed(1)
+#' td <- toc_from_scores(runif(500), runif(500) > 0.4)
+#' aucsi_baseline(td)
+aucsi_baseline <- function(toc) {
   stopifnot(inherits(toc, "toc_data"))
   area_ratio(
     x       = toc$k,
-    y_curve = toc$fom_random,
-    y_upper = toc$fom_upper,
-    y_base  = toc$fom_lower
+    y_curve = toc$csi_baseline,
+    y_upper = toc$csi_upper,
+    y_base  = toc$csi_lower
   )
 }
 
-#' FOM Skill: Normalised Improvement of AFOM over Random Baseline (DFOM)
+#' Integrated FOM of a Uniform (Random) Classifier (AUFOM) — Alias for AUCSI_baseline
 #'
-#' Standardises AFOM relative to the random baseline:
-#' `DFOM = (AFOM - AUFOM) / (1 - AUFOM)`.
+#' Alias for [aucsi_baseline()]. Kept for backward compatibility.
+#'
+#' @inheritParams aucsi_baseline
+#' @return Numeric scalar in \[0, 1\].
+#' @export
+aufom <- function(toc) {
+  aucsi_baseline(toc)
+}
+
+#' AUCSI Skill Score (AUCSIS)
+#'
+#' Standardises AUCSI relative to the random classifier baseline:
+#' `AUCSIS = (AUCSI - AUCSI_baseline) / (1 - AUCSI_baseline)`.
 #' A value of 0 corresponds to a random classifier; 1 corresponds to a perfect
 #' classifier.
 #'
@@ -95,13 +127,28 @@ aufom <- function(toc) {
 #' @examples
 #' set.seed(1)
 #' td <- toc_from_scores(runif(500), runif(500) > 0.4)
-#' dfom(td)
-dfom <- function(toc) {
-  a  <- afom(toc)
-  au <- aufom(toc)
+#' aucsis(td)
+aucsis <- function(toc) {
+  a  <- aucsi(toc)
+  au <- aucsi_baseline(toc)
   if (is.na(a) || is.na(au)) return(NA_real_)
   if (1 - au == 0) return(NA_real_)
   (a - au) / (1 - au)
+}
+
+#' FOM Skill: Normalised Improvement of AFOM over Random Baseline (DFOM) — Alias for AUCSIS
+#'
+#' Alias for [aucsis()]. Kept for backward compatibility.
+#'
+#' @inheritParams aucsis
+#' @return Numeric scalar.
+#' @export
+#' @examples
+#' set.seed(1)
+#' td <- toc_from_scores(runif(500), runif(500) > 0.4)
+#' dfom(td)
+dfom <- function(toc) {
+  aucsis(toc)
 }
 
 # ---------------------------------------------------------------------------
@@ -118,62 +165,126 @@ dfom <- function(toc) {
 #' @examples
 #' set.seed(42)
 #' td <- toc_from_scores(runif(500), runif(500) > 0.4)
-#' auc_roc(td)
-auc_roc <- function(toc) {
+#' auc(td)
+auc <- function(toc) {
   stopifnot(inherits(toc, "toc_data"))
   ord <- order(toc$fpr)
   pracma::trapz(toc$fpr[ord], toc$tpr[ord])
 }
 
-#' AUC Skill Score (DAUC)
+#' Area Under the ROC Curve (AUC-ROC) — Alias for AUC
+#'
+#' Alias for [auc()]. Kept for backward compatibility.
+#'
+#' @inheritParams auc
+#' @return Numeric scalar in \[0, 1\].
+#' @export
+#' @examples
+#' set.seed(42)
+#' td <- toc_from_scores(runif(500), runif(500) > 0.4)
+#' auc_roc(td)
+auc_roc <- function(toc) {
+  auc(toc)
+}
+
+#' AUC Skill Score (AUCS)
 #'
 #' Normalised deviation of AUC from the random classifier baseline (0.5):
-#' `DAUC = 2 * (AUC - 0.5)`.
+#' `AUCS = 2 * (AUC - 0.5) = 2*AUC - 1`.
 #' Ranges from -1 (worst) through 0 (random) to 1 (perfect).
 #'
 #' @param toc A `toc_data` object.
 #' @return Numeric scalar in \[-1, 1\].
 #' @export
+#' @examples
+#' set.seed(42)
+#' td <- toc_from_scores(runif(500), runif(500) > 0.4)
+#' aucs(td)
+aucs <- function(toc) {
+  2 * (auc(toc) - 0.5)
+}
+
+#' AUC Skill Score (DAUC) — Alias for AUCS
+#'
+#' Alias for [aucs()]. Kept for backward compatibility.
+#'
+#' @inheritParams aucs
+#' @return Numeric scalar in \[-1, 1\].
+#' @export
 dauc <- function(toc) {
-  2 * (auc_roc(toc) - 0.5)
+  aucs(toc)
 }
 
 # ---------------------------------------------------------------------------
-# MFOM: Maximum FOM ----
+# MaxCSI: Maximum CSI ----
 # ---------------------------------------------------------------------------
 
-#' Maximum FOM Across All Thresholds (MFOM)
+#' Maximum CSI Across All Thresholds (MaxCSI)
 #'
-#' The best FOM value achievable by optimally choosing the decision threshold.
+#' The best CSI value achievable by optimally choosing the decision threshold.
 #'
 #' @param toc A `toc_data` object.
+#' @return Numeric scalar in \[0, 1\].
+#' @export
+#' @examples
+#' set.seed(1)
+#' td <- toc_from_scores(runif(500), runif(500) > 0.4)
+#' mcsi(td)
+mcsi <- function(toc) {
+  stopifnot(inherits(toc, "toc_data"))
+  max(toc$csi, na.rm = TRUE)
+}
+
+#' Maximum FOM Across All Thresholds (MFOM) — Alias for MaxCSI
+#'
+#' Alias for [mcsi()]. Kept for backward compatibility.
+#'
+#' @inheritParams mcsi
 #' @return Numeric scalar in \[0, 1\].
 #' @export
 mfom <- function(toc) {
-  stopifnot(inherits(toc, "toc_data"))
-  max(toc$fom_curve, na.rm = TRUE)
+  mcsi(toc)
 }
 
-#' Threshold at Which MFOM is Achieved
+#' Threshold at Which MaxCSI is Achieved
 #'
 #' @param toc A `toc_data` object.
-#' @return Integer scalar. The value of `k` that maximises FOM.
+#' @return Integer scalar. The value of `k` that maximises CSI.
+#' @export
+#' @examples
+#' set.seed(1)
+#' td <- toc_from_scores(runif(500), runif(500) > 0.4)
+#' mcsi_threshold(td)
+mcsi_threshold <- function(toc) {
+  stopifnot(inherits(toc, "toc_data"))
+  toc$k[which.max(toc$csi)]
+}
+
+#' Threshold at Which MFOM is Achieved — Alias for mcsi_threshold
+#'
+#' Alias for [mcsi_threshold()]. Kept for backward compatibility.
+#'
+#' @inheritParams mcsi_threshold
+#' @return Integer scalar.
 #' @export
 mfom_threshold <- function(toc) {
-  stopifnot(inherits(toc, "toc_data"))
-  toc$k[which.max(toc$fom_curve)]
+  mcsi_threshold(toc)
 }
 
 # ---------------------------------------------------------------------------
-# Area Under Precision-Recall Curve (AUCPRC) ----
+# AUPRC: Area Under Precision-Recall Curve ----
 # ---------------------------------------------------------------------------
 
-#' Area Under the Precision-Recall Curve (AUCPRC)
+#' Area Under the Precision-Recall Curve (AUPRC)
 #'
 #' @param toc A `toc_data` object.
 #' @return Numeric scalar in \[0, 1\].
 #' @export
-auc_prc <- function(toc) {
+#' @examples
+#' set.seed(42)
+#' td <- toc_from_scores(runif(500), runif(500) > 0.4)
+#' auprc(td)
+auprc <- function(toc) {
   stopifnot(inherits(toc, "toc_data"))
   P   <- attr(toc, "n_positive")
   recall    <- toc$hits / P
@@ -182,9 +293,20 @@ auc_prc <- function(toc) {
   pracma::trapz(recall[ord], precision[ord])
 }
 
+#' Area Under the Precision-Recall Curve (AUC-PRC) — Alias for AUPRC
+#'
+#' Alias for [auprc()]. Kept for backward compatibility.
+#'
+#' @inheritParams auprc
+#' @return Numeric scalar in \[0, 1\].
+#' @export
+auc_prc <- function(toc) {
+  auprc(toc)
+}
+
 #' Precision-Recall Skill Score
 #'
-#' `PRC_Skill = (AUCPRC - prevalence) / (1 - prevalence)`
+#' `PRC_Skill = (AUPRC - prevalence) / (1 - prevalence)`
 #'
 #' @param toc A `toc_data` object.
 #' @return Numeric scalar.
@@ -193,7 +315,7 @@ prc_skill <- function(toc) {
   P  <- attr(toc, "n_positive")
   N  <- attr(toc, "n_total")
   pr <- P / N
-  (auc_prc(toc) - pr) / (1 - pr)
+  (auprc(toc) - pr) / (1 - pr)
 }
 
 # ---------------------------------------------------------------------------
@@ -202,7 +324,8 @@ prc_skill <- function(toc) {
 
 #' Integrated Metric Summary
 #'
-#' Returns a named numeric vector with all integrated metrics for a classifier.
+#' Returns a named numeric vector with all integrated metrics for a classifier,
+#' using the dissertation (CSI Framework) naming convention.
 #'
 #' @param toc A `toc_data` object.
 #' @return Named numeric vector.
@@ -213,13 +336,13 @@ prc_skill <- function(toc) {
 #' integrated_metrics(td)
 integrated_metrics <- function(toc) {
   c(
-    MFOM    = mfom(toc),
-    AFOM    = afom(toc),
-    AUFOM   = aufom(toc),
-    DFOM    = dfom(toc),
-    AUC     = auc_roc(toc),
-    DAUC    = dauc(toc),
-    AUCPRC  = auc_prc(toc),
+    MaxCSI    = mcsi(toc),
+    AUCSI     = aucsi(toc),
+    AUCSI_baseline = aucsi_baseline(toc),
+    AUCSIS    = aucsis(toc),
+    AUC       = auc(toc),
+    AUCS      = aucs(toc),
+    AUPRC     = auprc(toc),
     PRC_Skill = prc_skill(toc)
   )
 }

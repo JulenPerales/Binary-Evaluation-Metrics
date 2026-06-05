@@ -25,8 +25,14 @@ test_that("BinaryClassifier_from_hits constructor", {
   clf <- BinaryClassifier_from_hits(H, P, Q, name = "Perfect")
   expect_equal(clf$n_positive, P)
   expect_equal(clf$n_negative, Q)
-  expect_equal(clf$mfom, 1, tolerance = 1e-9)   # perfect classifier MFOM = 1
+  # New dissertation-name bindings
+  expect_equal(clf$mcsi, 1, tolerance = 1e-9)   # perfect classifier MaxCSI = 1
   expect_equal(clf$auc,  1, tolerance = 1e-6)   # perfect AUC = 1
+  # Backward-compatible aliases still work
+  expect_equal(clf$mfom, clf$mcsi)
+  expect_equal(clf$afom, clf$aucsi)
+  expect_equal(clf$dfom, clf$aucsis)
+  expect_equal(clf$dauc, clf$aucs)
 })
 
 test_that("at_threshold returns confusion_matrix", {
@@ -44,10 +50,14 @@ test_that("integrated metrics are in valid range", {
   scores <- runif(200)
   obs    <- scores > 0.4
   clf    <- BinaryClassifier$new(scores, obs)
-  expect_true(clf$auc   >= 0 && clf$auc   <= 1)
-  expect_true(clf$afom  >= 0 && clf$afom  <= 1)
-  expect_true(clf$mfom  >= 0 && clf$mfom  <= 1)
-  expect_true(clf$dauc  >= -1 && clf$dauc  <= 1)
+  expect_true(clf$auc    >= 0 && clf$auc    <= 1)
+  expect_true(clf$aucsi  >= 0 && clf$aucsi  <= 1)
+  expect_true(clf$mcsi   >= 0 && clf$mcsi   <= 1)
+  expect_true(clf$aucs   >= -1 && clf$aucs  <= 1)
+  # Backward-compatible aliases
+  expect_equal(clf$afom,  clf$aucsi)
+  expect_equal(clf$mfom,  clf$mcsi)
+  expect_equal(clf$dauc,  clf$aucs)
 })
 
 test_that("compute_metric_curve returns expected structure", {

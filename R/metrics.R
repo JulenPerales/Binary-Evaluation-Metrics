@@ -273,25 +273,43 @@ for_metric <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
 # Skill metrics ----
 # ---------------------------------------------------------------------------
 
-#' Gilbert Skill Score (GSS) / Equitable Threat Score (ETS)
+#' Revised Gilbert Skill Score (GSS) / Equitable Threat Score (ETS)
 #'
-#' Chance-corrected version of FOM. Accounts for the fraction of Hits expected
-#' by random chance (`Hr`).
-#' `GSS = (TP - Hr) / (TP + FP + FN - Hr)`, where
-#' `Hr = (TP + FP)(TP + FN) / N`.
+#' A **Skill** metric. Chance-corrected version of CSI. The dissertation
+#' (CSI Framework) identifies that the standard GSS formula is conceptually
+#' wrong because its denominator for the random baseline uses H+F+M (the
+#' actual union), whereas CSI_random should use H_rand+F_rand+M_rand (the
+#' random union). This implementation uses the revised formula:
+#'
+#' `GSS = (CSI - CSI_random) / (1 - CSI_random)`
+#'
+#' where `CSI_random = H_rand / (H_rand + F_rand + M_rand)` and
+#' - `H_rand = k * P / N`
+#' - `F_rand = k * Q / N`
+#' - `M_rand = P * (N - k) / N`
+#' (`k = H + F`, `P = n_positive`, `Q = n_negative`, `N = n_total`).
 #'
 #' @inheritParams oa
-#' @return Numeric scalar in \[-1/3, 1\].
+#' @return Numeric scalar in \[-1, 1\].
 #' @export
 #' @examples
 #' gss(confusion_matrix(28, 72, 23, 2680))
 gss <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
   cm <- .parse_cm(hits, fa, misses, cr)
-  k  <- cm$hits + cm$fa       # predicted positives
-  Hr <- k * cm$n_positive / cm$n_total
-  den <- k + cm$misses - Hr
-  if (den == 0) return(NA_real_)
-  (cm$hits - Hr) / den
+  k  <- cm$hits + cm$fa          # H + F (predicted positives)
+  P  <- cm$n_positive
+  E  <- cm$n_total
+  H_rand <- k * P / E
+  F_rand <- k * (E - P) / E
+  M_rand <- P * (E - k) / E
+  denom_random <- H_rand + F_rand + M_rand
+  csi_actual   <- cm$hits / (cm$hits + cm$fa + cm$misses)
+  csi_random   <- ifelse(denom_random == 0, NA_real_, H_rand / denom_random)
+  denom_actual <- cm$hits + cm$fa + cm$misses
+  if (denom_actual == 0) return(NA_real_)
+  denom_skill  <- 1 - csi_random
+  ifelse(is.na(denom_skill) | denom_skill == 0, NA_real_,
+         (csi_actual - csi_random) / denom_skill)
 }
 
 #' Peirce Skill Score (PSS) / Hanssen-Kuipers Discriminant
@@ -342,9 +360,13 @@ ets_score <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
 # Auxiliary rates ----
 # ---------------------------------------------------------------------------
 
-#' True Positive Rate (Sensitivity / Recall / POD)
+#' Producer's Accuracy (PA) / Sensitivity / Recall / POD
 #'
-#' `TPR = TP / (TP + FN)`
+#' An **Agreement** metric. Fraction of observed positives that were correctly
+#' predicted. Corresponds to Producer's Accuracy in the remote sensing
+#' literature and to Sensitivity / Recall / Probability of Detection (POD) in
+#' other fields.
+#' `PA = TP / (TP + FN)`
 #'
 #' @param hits A `confusion_matrix` object or TP count.
 #' @param fa FP count (ignored for this metric unless using a `confusion_matrix`).
@@ -352,7 +374,10 @@ ets_score <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
 #' @param cr TN count. Not required.
 #' @return Numeric scalar in \[0, 1\].
 #' @export
-sensitivity <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
+#' @examples
+#' pa(confusion_matrix(28, 72, 23, 2680))
+#' pa(28, fa = NULL, misses = 23)
+pa <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
   if (inherits(hits, "confusion_matrix")) {
     cm <- hits; return(cm$hits / cm$n_positive)
   }
@@ -360,28 +385,56 @@ sensitivity <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
   hits / (hits + misses)
 }
 
-#' True Negative Rate (Specificity)
+#' Sensitivity / Recall / POD — Alias for PA
 #'
-#' `TNR = TN / (TN + FP)`
+#' Alias for [pa()]. Kept for backward compatibility.
+#' `Sensitivity = PA = TP / (TP + FN)`
+#'
+#' @inheritParams pa
+#' @return Numeric scalar in \[0, 1\].
+#' @export
+sensitivity <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
+  pa(hits, fa, misses, cr)
+}
+
+#' SP / Specificity / True Negative Rate
+#'
+#' An **Agreement** metric. Fraction of observed negatives that were correctly
+#' predicted as negative.
+#' `SP = TN / (TN + FP)`
+#'
+#' @inheritParams oa
+#' @return Numeric scalar in \[0, 1\].
+#' @export
+#' @examples
+#' sp(confusion_matrix(28, 72, 23, 2680))
+sp <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
+  cm <- .parse_cm(hits, fa, misses, cr)
+  cm$cr / cm$n_negative
+}
+
+#' Specificity — Alias for SP
+#'
+#' Alias for [sp()]. Kept for backward compatibility.
+#' `Specificity = SP = TN / (TN + FP)`
 #'
 #' @inheritParams oa
 #' @return Numeric scalar in \[0, 1\].
 #' @export
 specificity <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
-  cm <- .parse_cm(hits, fa, misses, cr)
-  cm$cr / cm$n_negative
+  sp(hits, fa, misses, cr)
 }
 
-#' False Positive Rate (POFD)
+#' False Positive Rate (POFD) — Alias for FAR
 #'
+#' Alias for [far()]. Kept for backward compatibility.
 #' `FPR = FP / (FP + TN)`
 #'
 #' @inheritParams oa
 #' @return Numeric scalar in \[0, 1\].
 #' @export
 false_positive_rate <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
-  cm <- .parse_cm(hits, fa, misses, cr)
-  cm$fa / cm$n_negative
+  far(hits, fa, misses, cr)
 }
 
 #' False Alarm Ratio (FAR)
@@ -412,7 +465,12 @@ false_alarm_ratio <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
 
 #' Compute All Metrics from a Confusion Matrix
 #'
-#' Returns a named numeric vector with all agreement and skill metrics.
+#' Returns a named numeric vector with all agreement and skill metrics,
+#' grouped according to the CSI Framework (dissertation Chapter 1).
+#'
+#' **Agreement metrics** (do not correct for chance): OA, PA, SP, FAR, UA,
+#' FOR, CSI, F1.
+#' **Skill metrics** (chance-corrected): GSS (Revised), HSS, PSS, MCC.
 #'
 #' @param cm A `confusion_matrix` object.
 #' @return A named numeric vector.
@@ -422,18 +480,19 @@ false_alarm_ratio <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
 all_metrics <- function(cm) {
   stopifnot(inherits(cm, "confusion_matrix"))
   c(
-    OA          = oa(cm),
-    BA          = ba(cm),
-    MCC         = mcc(cm),
-    Kappa       = kappa_score(cm),
-    F1          = f1_score(cm),
-    FOM         = fom(cm),
-    GSS         = gss(cm),
-    PSS         = pss(cm),
-    HSS         = hss(cm),
-    Sensitivity = sensitivity(cm),
-    Specificity = specificity(cm),
-    FPR         = false_positive_rate(cm),
-    FAR         = false_alarm_ratio(cm)
+    # Agreement metrics
+    OA    = oa(cm),
+    PA    = pa(cm),
+    SP    = sp(cm),
+    FAR   = far(cm),
+    UA    = ua(cm),
+    FOR   = for_metric(cm),
+    CSI   = csi(cm),
+    F1    = f1_score(cm),
+    # Skill metrics
+    GSS   = gss(cm),
+    HSS   = hss(cm),
+    PSS   = pss(cm),
+    MCC   = mcc(cm)
   )
 }

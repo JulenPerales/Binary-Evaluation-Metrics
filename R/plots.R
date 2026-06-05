@@ -167,14 +167,14 @@ plot_roc <- function(toc, classifier_name = "Classifier", annotate_auc = TRUE) {
 }
 
 # ---------------------------------------------------------------------------
-# plot_fom ----
+# plot_csi ----
 # ---------------------------------------------------------------------------
 
-#' Plot the FOM Curve with Bounds
+#' Plot the CSI Curve with Bounds
 #'
-#' Displays the FOM (CSI) as a function of threshold `k`, together with the
-#' upper bound, lower bound and random-classifier baseline.  Annotates the
-#' area ratio (AFOM relative to upper/lower area).
+#' Displays the CSI (Critical Success Index) as a function of threshold `k`,
+#' together with the upper bound, lower bound and random-classifier baseline.
+#' Annotates the area metrics (AUCSI, AUCSIS, MaxCSI).
 #'
 #' @param toc A `toc_data` object.
 #' @param classifier_name Character. Legend label.
@@ -184,8 +184,8 @@ plot_roc <- function(toc, classifier_name = "Classifier", annotate_auc = TRUE) {
 #' @examples
 #' set.seed(3)
 #' td <- toc_from_scores(runif(300), runif(300) > 0.5)
-#' plot_fom(td)
-plot_fom <- function(toc, classifier_name = "Classifier", percent_x = TRUE) {
+#' plot_csi(td)
+plot_csi <- function(toc, classifier_name = "Classifier", percent_x = TRUE) {
   stopifnot(inherits(toc, "toc_data"))
   N <- attr(toc, "n_total")
   P <- attr(toc, "n_positive")
@@ -195,20 +195,20 @@ plot_fom <- function(toc, classifier_name = "Classifier", percent_x = TRUE) {
 
   df <- tibble::tibble(
     k                   = x_vals,
-    .clf                = toc$fom_curve,
-    `Upper Bound`       = toc$fom_upper,
-    `Lower Bound`       = toc$fom_lower,
-    `Random Classifier` = toc$fom_random
+    .clf                = toc$csi,
+    `Upper Bound`       = toc$csi_upper,
+    `Lower Bound`       = toc$csi_lower,
+    `Random Classifier` = toc$csi_baseline
   )
   names(df)[names(df) == ".clf"] <- classifier_name
-  df <- tidyr::pivot_longer(df, cols = -1L, names_to = "curve", values_to = "fom")
+  df <- tidyr::pivot_longer(df, cols = -1L, names_to = "curve", values_to = "csi_val")
 
-  ar  <- area_ratio(x_vals, toc$fom_curve, toc$fom_upper, toc$fom_lower)
-  dau <- dfom(toc)
+  ar   <- area_ratio(x_vals, toc$csi, toc$csi_upper, toc$csi_lower)
+  dsis <- aucsis(toc)
 
   xlab <- if (percent_x) "Predicted Positives (% of N)" else "Predicted Positives (k)"
 
-  p <- ggplot2::ggplot(df, ggplot2::aes(x = k, y = fom,
+  p <- ggplot2::ggplot(df, ggplot2::aes(x = k, y = csi_val,
                                          colour = curve, linetype = curve)) +
     ggplot2::geom_line(linewidth = 1.1) +
     .curve_scale_colour(classifier_name) +
@@ -222,8 +222,8 @@ plot_fom <- function(toc, classifier_name = "Classifier", percent_x = TRUE) {
     ) +
     ggplot2::labs(
       x        = xlab,
-      y        = "FOM / CSI",
-      title    = "FOM Curve with Bounds",
+      y        = "CSI",
+      title    = "CSI Curve with Bounds",
       subtitle = sprintf(
         "P = %d | Q = %d | prev = %.3f", P, Q, P / N
       )
@@ -231,14 +231,29 @@ plot_fom <- function(toc, classifier_name = "Classifier", percent_x = TRUE) {
     ggplot2::annotate(
       "text", x = Inf, y = Inf,
       label = sprintf(
-        "AFOM = %.3f\nDFOM = %.3f\nMFOM = %.3f",
-        afom(toc), dau, mfom(toc)
+        "AUCSI = %.3f\nAUCSIS = %.3f\nMaxCSI = %.3f",
+        aucsi(toc), dsis, mcsi(toc)
       ),
       hjust = 1.05, vjust = 1.2,
       size  = 3.2, colour = "grey30"
     ) +
     binm_theme()
   p
+}
+
+#' Plot the FOM Curve with Bounds — Alias for plot_csi
+#'
+#' Alias for [plot_csi()]. Kept for backward compatibility.
+#'
+#' @inheritParams plot_csi
+#' @return A `ggplot2` object.
+#' @export
+#' @examples
+#' set.seed(3)
+#' td <- toc_from_scores(runif(300), runif(300) > 0.5)
+#' plot_fom(td)
+plot_fom <- function(toc, classifier_name = "Classifier", percent_x = TRUE) {
+  plot_csi(toc, classifier_name, percent_x)
 }
 
 # ---------------------------------------------------------------------------
@@ -406,7 +421,7 @@ compare_classifiers <- function(toc_list, type = c("roc", "toc", "fom")) {
       roc = tibble::tibble(x = td$fpr,          y = td$tpr,        clf = nm),
       toc = tibble::tibble(x = td$k,             y = td$hits,       clf = nm),
       fom = tibble::tibble(x = td$k / attr(td, "n_total"),
-                           y = td$fom_curve,     clf = nm)
+                           y = td$csi,           clf = nm)
     )
   }
 

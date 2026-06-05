@@ -37,12 +37,17 @@ test_that("TOC bounds are correct", {
   expect_true(all(td$hits_lower == pmax(0, td$k - Q)))
 })
 
-test_that("FOM upper >= FOM curve >= FOM lower", {
+test_that("CSI upper >= CSI curve >= CSI lower", {
   set.seed(3)
   td <- toc_from_scores(runif(100), runif(100) > 0.45)
   # Allow small floating point tolerance
-  expect_true(all(td$fom_upper >= td$fom_curve - 1e-9))
-  expect_true(all(td$fom_curve >= td$fom_lower - 1e-9))
+  expect_true(all(td$csi_upper >= td$csi - 1e-9))
+  expect_true(all(td$csi       >= td$csi_lower - 1e-9))
+  # Backward-compatible columns still exist
+  expect_true("fom_curve"  %in% names(td))
+  expect_true("fom_upper"  %in% names(td))
+  expect_true("fom_lower"  %in% names(td))
+  expect_true("fom_random" %in% names(td))
 })
 
 test_that("toc_metric_curve runs for all metrics", {

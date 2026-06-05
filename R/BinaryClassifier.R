@@ -25,11 +25,12 @@
 #' @section Key active bindings:
 #' * `$toc` — the underlying `toc_data` tibble
 #' * `$prevalence` — P / N
-#' * `$mfom` — maximum FOM across all thresholds
-#' * `$afom` — integrated FOM
-#' * `$dfom` — FOM skill vs. random baseline
+#' * `$mcsi` — maximum CSI across all thresholds (also `$mfom`)
+#' * `$aucsi` — integrated CSI (also `$afom`)
+#' * `$aucsi_baseline` — AUCSI of random classifier (also `$aufom`)
+#' * `$aucsis` — AUCSI skill score (also `$dfom`)
 #' * `$auc` — area under ROC curve
-#' * `$dauc` — AUC skill score
+#' * `$aucs` — AUC skill score (also `$dauc`)
 #'
 #' @export
 #' @examples
@@ -54,21 +55,29 @@ BinaryClassifier <- R6::R6Class(
 
   # ── Active bindings ────────────────────────────────────────────────────
   active = list(
-    toc        = function() private$.toc,
-    name       = function(v) {
+    toc          = function() private$.toc,
+    name         = function(v) {
       if (missing(v)) private$.name else { private$.name <- v; invisible(self) }
     },
-    n_positive = function() attr(private$.toc, "n_positive"),
-    n_negative = function() attr(private$.toc, "n_negative"),
-    n_total    = function() attr(private$.toc, "n_total"),
-    prevalence = function() self$n_positive / self$n_total,
-    mfom       = function() mfom(private$.toc),
-    afom       = function() afom(private$.toc),
-    aufom      = function() aufom(private$.toc),
-    dfom       = function() dfom(private$.toc),
-    auc        = function() auc_roc(private$.toc),
-    dauc       = function() dauc(private$.toc),
-    aucprc     = function() auc_prc(private$.toc)
+    n_positive   = function() attr(private$.toc, "n_positive"),
+    n_negative   = function() attr(private$.toc, "n_negative"),
+    n_total      = function() attr(private$.toc, "n_total"),
+    prevalence   = function() self$n_positive / self$n_total,
+    # Dissertation-name bindings (primary)
+    mcsi         = function() mcsi(private$.toc),
+    aucsi        = function() aucsi(private$.toc),
+    aucsi_baseline = function() aucsi_baseline(private$.toc),
+    aucsis       = function() aucsis(private$.toc),
+    auc          = function() auc(private$.toc),
+    aucs         = function() aucs(private$.toc),
+    auprc        = function() auprc(private$.toc),
+    # Backward-compatible aliases
+    mfom         = function() mcsi(private$.toc),
+    afom         = function() aucsi(private$.toc),
+    aufom        = function() aucsi_baseline(private$.toc),
+    dfom         = function() aucsis(private$.toc),
+    dauc         = function() aucs(private$.toc),
+    aucprc       = function() auprc(private$.toc)
   ),
 
   # ── Public methods ─────────────────────────────────────────────────────
@@ -126,8 +135,8 @@ BinaryClassifier <- R6::R6Class(
     #' @description Full metric summary printed to the console.
     summary = function() {
       self$print()
-      cat("\n  ── Point Metrics at Optimal Threshold ──────────────────\n")
-      cm <- self$at_threshold(mfom_threshold(private$.toc))
+      cat("\n  ── Point Metrics at Optimal Threshold (MaxCSI) ─────────\n")
+      cm <- self$at_threshold(mcsi_threshold(private$.toc))
       metrics_vec <- all_metrics(cm)
       nms <- names(metrics_vec)
       for (i in seq_along(metrics_vec)) {
@@ -136,7 +145,7 @@ BinaryClassifier <- R6::R6Class(
       cat("\n  ── Integrated Metrics ───────────────────────────────────\n")
       int <- integrated_metrics(private$.toc)
       for (i in seq_along(int)) {
-        cat(sprintf("  %-12s  %7.4f\n", names(int)[i], int[i]))
+        cat(sprintf("  %-16s  %7.4f\n", names(int)[i], int[i]))
       }
       invisible(self)
     },
@@ -155,10 +164,16 @@ BinaryClassifier <- R6::R6Class(
       plot_roc(private$.toc, classifier_name = private$.name, ...)
     },
 
-    #' @description FOM curve with bounds.
-    #' @param ... Additional arguments passed to [plot_fom()].
+    #' @description CSI curve with bounds (primary method).
+    #' @param ... Additional arguments passed to [plot_csi()].
+    plot_csi = function(...) {
+      plot_csi(private$.toc, classifier_name = private$.name, ...)
+    },
+
+    #' @description FOM curve with bounds (alias for plot_csi, backward compat).
+    #' @param ... Additional arguments passed to [plot_csi()].
     plot_fom = function(...) {
-      plot_fom(private$.toc, classifier_name = private$.name, ...)
+      plot_csi(private$.toc, classifier_name = private$.name, ...)
     },
 
     #' @description Any metric curve with bounds.
@@ -172,7 +187,7 @@ BinaryClassifier <- R6::R6Class(
       plot_metric_curve(mc, ylab = ylab, ...)
     },
 
-    #' @description Grid of all standard metric curves.
+    #' @description Grid of all standard metric curves (CSI Framework grouping).
     #' @return A `patchwork` composite plot.
     plot_all_metrics = function() {
       td <- private$.toc
@@ -180,24 +195,26 @@ BinaryClassifier <- R6::R6Class(
       Q  <- self$n_negative
       N  <- self$n_total
 
+      # Agreement metrics
       p_oa   <- plot_metric_curve(toc_metric_curve(td, oa,    "OA"),    "OA")
-      p_ba   <- plot_metric_curve(toc_metric_curve(td, ba,    "BA"),    "BA")
-      p_mcc  <- plot_metric_curve(toc_metric_curve(td, mcc,   "MCC"),   "MCC")
-      p_kap  <- plot_metric_curve(toc_metric_curve(td, kappa_score, "Kappa"), "Kappa")
-      p_fom  <- plot_metric_curve(toc_metric_curve(td, fom,   "FOM"),   "FOM / CSI")
-      p_gss  <- plot_metric_curve(toc_metric_curve(td, gss,   "GSS"),   "GSS")
-      p_pss  <- plot_metric_curve(toc_metric_curve(td, pss,   "PSS"),   "PSS")
+      p_csi  <- plot_metric_curve(toc_metric_curve(td, csi,   "CSI"),   "CSI")
+      p_pa   <- plot_metric_curve(toc_metric_curve(td, pa,    "PA"),    "PA")
+      p_sp   <- plot_metric_curve(toc_metric_curve(td, sp,    "SP"),    "SP")
+      # Skill metrics
+      p_gss  <- plot_metric_curve(toc_metric_curve(td, gss,   "GSS"),   "GSS (Revised)")
       p_hss  <- plot_metric_curve(toc_metric_curve(td, hss,   "HSS"),   "HSS")
+      p_pss  <- plot_metric_curve(toc_metric_curve(td, pss,   "PSS"),   "PSS")
+      p_mcc  <- plot_metric_curve(toc_metric_curve(td, mcc,   "MCC"),   "MCC")
 
       patchwork::wrap_plots(
-        p_oa, p_ba, p_mcc, p_kap,
-        p_fom, p_gss, p_pss, p_hss,
+        p_oa, p_csi, p_pa, p_sp,
+        p_gss, p_hss, p_pss, p_mcc,
         ncol = 4
       ) +
         patchwork::plot_annotation(
           title    = sprintf("Metric profiles — %s", private$.name),
           subtitle = sprintf(
-            "N = %d | P = %d | Q = %d | prev = %.3f",
+            "N = %d | P = %d | Q = %d | prev = %.3f  |  Agreement (top) / Skill (bottom)",
             N, P, Q, P / N
           )
         )
