@@ -119,8 +119,21 @@ hss(cm)         # Heidke Skill Score:          0.362
 pss(cm)         # Peirce Skill Score:          0.523
 mcc(cm)         # Matthews Correlation Coeff:  0.381
 
-# All at once
+# All at once — returns a tibble with Agreement/Skill classification.
+# Skill metrics include the value of the corresponding agreement metric
+# that a random classifier would achieve (baseline_agreement) and the
+# name of that metric (corresponding_agreement_metric).
 all_metrics(cm)
+#> # A tibble: 12 x 5
+#>    metric type      value baseline_agreement corresponding_agreement_metric
+#>    <chr>  <chr>     <dbl>              <dbl> <chr>
+#>  1 OA     Agreement 0.973             NA     NA
+#>  2 PA     Agreement 0.549             NA     NA
+#>  ...
+#>  9 GSS    Skill     0.221            0.0122  CSI
+#> 10 HSS    Skill     0.362            0.9474  OA
+#> 11 PSS    Skill     0.523            0.0357  PA
+#> 12 MCC    Skill     0.381            0.9474  OA
 ```
 
 ### Full multi-threshold analysis
@@ -141,10 +154,18 @@ clf$summary()   # point metrics at optimal threshold + all integrated metrics
 ### Plots
 
 ```r
+# Basic plots (continuous classifier curve with bounds and baseline)
 clf$plot_toc()          # TOC curve with upper/lower bounds and baseline
 clf$plot_csi()          # CSI curve — same structure as TOC
 clf$plot_roc()          # ROC curve
-clf$plot_all_metrics()  # 2×4 panel: OA / CSI / PA / SP (Agreement) + GSS / HSS / PSS / MCC (Skill)
+clf$plot_all_metrics()  # 2x4 panel: OA / CSI / PA / SP (Agreement) + GSS / HSS / PSS / MCC (Skill)
+
+# Overlay a single-threshold forecast as a reference point.
+# For ROC, (FPR, TPR) are normalised — the point is always on [0, 1]^2.
+# For CSI and TOC (percent = TRUE), the reference cm's own N and P are used.
+clf$plot_toc(percent = TRUE, reference_cm = cm, reference_label = "Finley (1884)")
+clf$plot_csi(reference_cm = cm, reference_label = "Finley (1884)")
+clf$plot_roc(reference_cm = cm, reference_label = "Finley (1884)")
 ```
 
 ### Interactive exploration

@@ -125,7 +125,11 @@ formulation.
 classification. Its use is discouraged by the dissertation; prefer `hss()` instead.
 
 ```{r all-metrics}
-# Full metric summary, grouped by Agreement then Skill
+# Full metric summary, grouped by Agreement then Skill.
+# Returns a tibble. Skill metrics carry the baseline_agreement value (what the
+# corresponding agreement metric would be for a random classifier at the same
+# prediction rate) and corresponding_agreement_metric (which agreement metric
+# that is: GSS -> CSI, HSS -> OA, PSS -> PA, MCC -> OA).
 all_metrics(cm)
 ```
 
@@ -168,19 +172,24 @@ Key columns:
 
 The TOC curve plots **Hits** against `k`. The upper and lower bounds show the
 range of achievable performance; the baseline represents random classification.
+An optional `reference_cm` argument overlays a single-threshold forecast as a
+labelled point — here Finley's 1884 tornado data.
 
 ```{r plot-toc}
-plot_toc(td)
+cm_finley <- confusion_matrix(hits = 28, fa = 72, misses = 23, cr = 2680)
+plot_toc(td, percent = TRUE,
+         reference_cm = cm_finley, reference_label = "Finley (1884)")
 ```
 
 ### CSI curve
 
 The CSI curve plots **CSI(k)** against `k`. It inherits the same three reference
-lines. The area between the CSI curve and these bounds is the basis for the
-integrated metrics.
+lines. The reference point shows Finley's CSI at his operating threshold. The
+x coordinate uses the reference cm's own N for normalisation, so the point is
+always comparable on the percentage scale.
 
 ```{r plot-csi}
-plot_csi(td)
+plot_csi(td, reference_cm = cm_finley, reference_label = "Finley (1884)")
 ```
 
 The annotated values on the CSI plot are:
@@ -191,8 +200,12 @@ The annotated values on the CSI plot are:
 
 ### ROC curve
 
+For the ROC curve the reference point uses (FPR, TPR) — normalised rates that
+are always on [0, 1]², making cross-dataset overlays straightforward. Finley's
+forecast can thus be plotted on the same axes regardless of its dataset size.
+
 ```{r plot-roc}
-plot_roc(td)
+plot_roc(td, reference_cm = cm_finley, reference_label = "Finley (1884)")
 ```
 
 ### Any metric across thresholds
