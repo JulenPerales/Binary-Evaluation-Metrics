@@ -398,7 +398,7 @@ plot_precision_recall <- function(toc, classifier_name = "Classifier") {
 #' `toc_data` object.
 #'
 #' @param toc_list A named list of `toc_data` objects.
-#' @param type Character. One of `"toc"`, `"roc"`, or `"fom"`.
+#' @param type Character. One of `"toc"`, `"roc"`, or `"csi"` (alias `"fom"`).
 #' @return A `ggplot2` object.
 #' @export
 #' @examples
@@ -406,8 +406,9 @@ plot_precision_recall <- function(toc, classifier_name = "Classifier") {
 #' td_a <- toc_from_scores(runif(300), runif(300) > 0.4)
 #' td_b <- toc_from_scores(runif(300), runif(300) > 0.5)
 #' compare_classifiers(list(A = td_a, B = td_b), type = "roc")
-compare_classifiers <- function(toc_list, type = c("roc", "toc", "fom")) {
+compare_classifiers <- function(toc_list, type = c("roc", "toc", "csi", "fom")) {
   type <- match.arg(type)
+  if (type == "fom") type <- "csi"
   stopifnot(
     is.list(toc_list),
     length(toc_list) >= 2,
@@ -420,7 +421,7 @@ compare_classifiers <- function(toc_list, type = c("roc", "toc", "fom")) {
     switch(type,
       roc = tibble::tibble(x = td$fpr,          y = td$tpr,        clf = nm),
       toc = tibble::tibble(x = td$k,             y = td$hits,       clf = nm),
-      fom = tibble::tibble(x = td$k / attr(td, "n_total"),
+      csi = tibble::tibble(x = td$k / attr(td, "n_total"),
                            y = td$csi,           clf = nm)
     )
   }
@@ -431,7 +432,7 @@ compare_classifiers <- function(toc_list, type = c("roc", "toc", "fom")) {
   axis_labels <- switch(type,
     roc = list("False Positive Rate", "True Positive Rate"),
     toc = list("Predicted Positives (k)", "Hits"),
-    fom = list("Predicted Positives (% of N)", "FOM / CSI")
+    csi = list("Predicted Positives (% of N)", "CSI")
   )
 
   p <- ggplot2::ggplot(df, ggplot2::aes(x = x, y = y, colour = clf)) +

@@ -23,51 +23,124 @@ library(binmetrics)
 
 ## Overview
 
-**binmetrics** evaluates binary classifiers through the full range of decision
-thresholds, not just at a single operating point. The package centres on the
-**Threshold Operating Characteristic (TOC)** space, which represents classifier
-performance as a function of the number of predicted positives $k$.
+**binmetrics** is built around the **CSI Framework** — a unified approach to binary
+classification evaluation developed in the doctoral dissertation
+*"The CSI Framework for the Evaluation of Binary Classifications in Rare Events"*
+(Perales, UPNA, 2026).
 
-Two families of metrics are distinguished:
+The central distinction the package enforces is between two fundamentally different
+types of metrics:
 
-- **Agreement metrics** (OA, BA, MCC, Kappa, F1): compare predictions to
-  observations with no notion of a "baseline".
-- **Skill metrics** (FOM/CSI, GSS, PSS, HSS): measure improvement over a
-  random or uninformative classifier.
+- **Agreement metrics** — how similar are the predictions to the observations?
+- **Skill metrics** — does the classifier outperform a random baseline?
+
+A model can have high Agreement simply because the majority class dominates. In
+land change modelling, for example, a classifier that never predicts any change can
+score Overall Agreement above 95% while being completely uninformative. Skill
+metrics correct for this by comparing against what random guessing would achieve.
 
 ---
 
-## 1. Single-threshold analysis
+## 1. The contingency table
 
-The simplest entry point is a confusion matrix at a fixed threshold.
+Every binary evaluation starts with a **contingency table**. Given a set of
+predictions and observations, four outcomes are possible:
 
-```{r single-threshold}
-# Finley (1884) tornado forecasting data
+|                        | Observed presence | Observed absence |
+|------------------------|:-----------------:|:----------------:|
+| **Predicted presence** | **H** — Hits (TP) | **F** — False Alarms (FP) |
+| **Predicted absence**  | **M** — Misses (FN) | **C** — Correct Rejections (TN) |
+
+We use Finley's (1884) classic tornado forecast dataset as a running example:
+28 observed tornadoes were correctly forecast (Hits), 72 were false alarms,
+23 real tornadoes were missed, and 2680 non-events were correctly classified.
+
+```{r confusion-matrix}
 cm <- confusion_matrix(hits = 28, fa = 72, misses = 23, cr = 2680)
 print(cm)
 ```
 
-```{r single-threshold-summary}
+```{r confusion-summary}
 summary(cm)
-```
-
-You can call any metric function directly:
-
-```{r single-metrics}
-fom(cm)           # Figure of Merit / CSI
-gss(cm)           # Gilbert Skill Score (= ETS)
-pss(cm)           # Peirce Skill Score
-all_metrics(cm)   # all at once
 ```
 
 ---
 
-## 2. Full threshold analysis — TOC data
+## 2. Agreement metrics
 
-The key object in **binmetrics** is the `toc_data` tibble, which enumerates
-the classifier's performance at every possible threshold rank.
+Agreement metrics measure the similarity between predictions and observations.
+They do **not** compare against any baseline — a high Agreement value does not mean
+the classifier is good.
 
-### From classifier scores
+```{r agreement-metrics}
+oa(cm)          # Overall Agreement:        (H + C) / N
+pa(cm)          # Producer's Accuracy (PA): H / (H + M)  =  Sensitivity
+ua(cm)          # User's Accuracy (UA):     H / (H + F)  =  Precision
+sp(cm)          # Specificity (SP):         C / (C + F)
+far(cm)         # False Alarm Rate (FAR):   F / (C + F)  =  1 - SP
+for_metric(cm)  # False Omission Rate:      M / (C + M)
+csi(cm)         # Critical Success Index:   H / (H + F + M)
+f1_score(cm)    # F1 Score:                 2H / (2H + F + M)
+```
+
+**CSI (Critical Success Index)** — also called Figure of Merit, Threat Score, or
+Jaccard Index depending on the field — is the central metric of this framework.
+It focuses exclusively on the event of interest, ignoring Correct Rejections. This
+makes it appropriate when the event is rare and C dominates the table.
+
+You can pass raw counts directly when `cr` is not needed:
+
+```{r csi-raw}
+csi(28, 72, 23)   # same result, no cr required
+f1_score(28, 72, 23)
+```
+
+---
+
+## 3. Skill metrics
+
+Skill metrics measure how much the classifier outperforms a random baseline.
+A random classifier is one that classifies presence uniformly at the rate of
+prevalence — it has no actual discrimination ability.
+
+```{r skill-metrics}
+gss(cm)   # Revised Gilbert Skill Score: (CSI - CSI_random) / (1 - CSI_random)
+hss(cm)   # Heidke Skill Score:          based on OA vs random OA
+pss(cm)   # Peirce Skill Score:          PA - FAR
+mcc(cm)   # Matthews Correlation Coeff:  Pearson corr on binary outcomes
+```
+
+**Note on GSS:** The standard Gilbert Skill Score formula has a conceptual
+inconsistency — it uses the actual classifier's union (H+F+M) for the random
+baseline, when the random classifier has a different union. The `gss()` function
+implements the **Revised GSS** from the dissertation, which correctly uses
+`CSI_random = H_rand / (H_rand + F_rand + M_rand)`.
+
+**Note on MCC:** Although MCC is often presented as an Agreement metric in other
+packages and papers, the dissertation classifies it as a **Skill metric** because
+it implicitly compares against a random performance through its covariance
+formulation.
+
+**Note on Kappa:** Cohen's Kappa is mathematically equivalent to HSS for binary
+classification. Its use is discouraged by the dissertation; prefer `hss()` instead.
+
+```{r all-metrics}
+# Full metric summary, grouped by Agreement then Skill
+all_metrics(cm)
+```
+
+---
+
+## 4. Multi-threshold analysis — TOC and CSI curves
+
+Single-threshold metrics evaluate performance at one decision point. But a soft
+classifier (one that assigns scores rather than binary labels) can be evaluated at
+every possible threshold. The **TOC curve** and the **CSI curve** visualise this.
+
+### Building a TOC data object
+
+The `toc_data` object is the package's central data structure: a tibble with one
+row per threshold `k` (the number of predicted positives).
 
 ```{r toc-from-scores}
 set.seed(42)
@@ -76,101 +149,199 @@ scores <- runif(n)
 obs    <- scores > 0.5 + rnorm(n, sd = 0.25)
 
 td <- toc_from_scores(scores, obs)
-td
+head(td[, c("k", "hits", "fa", "misses", "cr", "csi", "csi_upper", "csi_baseline")])
 ```
 
-### TOC plot
+Key columns:
+
+| Column | Description |
+|--------|-------------|
+| `k` | Number of predicted positives (0 to N) |
+| `hits`, `fa`, `misses`, `cr` | Contingency table entries at threshold `k` |
+| `csi` | CSI value of the classifier at `k` |
+| `csi_upper` | Upper bound — best possible CSI at `k` |
+| `csi_lower` | Lower bound — worst possible CSI at `k` |
+| `csi_baseline` | Random classifier baseline at `k` |
+| `tpr`, `fpr` | True/False Positive Rates (for ROC) |
+
+### TOC curve
+
+The TOC curve plots **Hits** against `k`. The upper and lower bounds show the
+range of achievable performance; the baseline represents random classification.
 
 ```{r plot-toc}
 plot_toc(td)
 ```
 
-### ROC plot
+### CSI curve
+
+The CSI curve plots **CSI(k)** against `k`. It inherits the same three reference
+lines. The area between the CSI curve and these bounds is the basis for the
+integrated metrics.
+
+```{r plot-csi}
+plot_csi(td)
+```
+
+The annotated values on the CSI plot are:
+
+- **MaxCSI** — maximum CSI achievable at the optimal threshold
+- **AUCSI** — area between the CSI curve and the lower bound, normalised
+- **AUCSIS** — CSI skill score: how much AUCSI exceeds the random baseline
+
+### ROC curve
 
 ```{r plot-roc}
 plot_roc(td)
 ```
 
-### FOM curve with theoretical bounds
+### Any metric across thresholds
 
-The FOM curve is shown alongside the **upper bound** (best possible classifier
-with the same hit counts), the **lower bound** (worst-case ranking), and the
-**random classifier** baseline.
+Any metric can be plotted against `k` using `toc_metric_curve()`:
 
-```{r plot-fom}
-plot_fom(td)
+```{r plot-metric-gss}
+mc_gss <- toc_metric_curve(td, gss, "GSS")
+plot_metric_curve(mc_gss, "GSS")
 ```
 
-The annotated values are:
-
-- **AFOM**: area under FOM curve normalised by the upper–lower band area.
-- **DFOM**: FOM skill — improvement of AFOM over the random baseline.
-- **MFOM**: maximum FOM across all thresholds.
-
-### Any metric with its bounds
-
-```{r plot-metric}
-# GSS curve with bounds
-mc <- toc_metric_curve(td, gss, "GSS")
-plot_metric_curve(mc, "GSS")
+```{r plot-metric-pss}
+mc_pss <- toc_metric_curve(td, pss, "PSS")
+plot_metric_curve(mc_pss, "PSS")
 ```
 
 ---
 
-## 3. Integrated metrics
+## 5. Integrated metrics
+
+Integrated metrics summarise classifier performance **across all thresholds**.
+The dissertation introduces four CSI-based integrated metrics as alternatives
+to the AUC framework, designed to be less sensitive to prevalence.
 
 ```{r integrated}
 integrated_metrics(td)
 ```
 
-| Metric | Meaning |
-|--------|---------|
-| MFOM   | Maximum FOM across all thresholds |
-| AFOM   | Area-normalised integrated FOM |
-| AUFOM  | AFOM of a random classifier (baseline) |
-| DFOM   | FOM skill = (AFOM - AUFOM) / (1 - AUFOM) |
-| AUC    | Area under ROC curve |
-| DAUC   | AUC skill = 2*(AUC - 0.5) |
-| AUCPRC | Area under Precision-Recall curve |
+| Metric | Formula | Interpretation |
+|--------|---------|----------------|
+| **MaxCSI** | max(CSI curve) | Best CSI at optimal threshold |
+| **AUCSI** | ∫(CSI − CSI_lower) / ∫(CSI_upper − CSI_lower) | Normalised area under CSI curve |
+| **AUCSI_baseline** | Same integral for random classifier | Chance-level AUCSI |
+| **AUCSIS** | (AUCSI − AUCSI_baseline) / (1 − AUCSI_baseline) | CSI skill across all thresholds |
+| **AUC** | ∫ TPR d(FPR) | Standard area under ROC curve |
+| **AUCS** | 2 × (AUC − 0.5) | AUC skill score |
+| **AUPRC** | ∫ Precision d(Recall) | Area under Precision-Recall curve |
+
+The key advantage of AUCSI and AUCSIS over AUC and AUCS is that they exclude
+Correct Rejections, focusing exclusively on the rare event. This makes them less
+inflated when prevalence is low.
 
 ---
 
-## 4. Object-oriented API
+## 6. Object-oriented API — `BinaryClassifier`
 
-The `BinaryClassifier` R6 class bundles the full workflow.
+The `BinaryClassifier` R6 class wraps the full workflow into a single object.
 
 ```{r oo-api}
 clf <- BinaryClassifier$new(scores, obs, name = "Demo Classifier")
+clf
+```
+
+```{r oo-summary}
 clf$summary()
 ```
 
+All integrated metrics are available as active bindings:
+
+```{r oo-bindings}
+clf$mcsi       # MaxCSI
+clf$aucsi      # AUCSI
+clf$aucsis     # AUCSIS
+clf$auc        # AUC
+clf$aucs       # AUCS
+clf$auprc      # AUPRC
+```
+
+Evaluate any threshold directly:
+
+```{r oo-threshold}
+cm_at_200 <- clf$at_threshold(200)
+csi(cm_at_200)
+gss(cm_at_200)
+```
+
+### Plots from the object
+
 ```{r oo-plots, eval=FALSE}
 clf$plot_toc()
-clf$plot_fom()
+clf$plot_csi()          # CSI curve with AUCSI / AUCSIS / MaxCSI annotations
 clf$plot_roc()
-clf$plot_all_metrics()   # patchwork panel of all 8 standard metrics
+clf$plot_all_metrics()  # 2×4 panel: Agreement (OA/CSI/PA/SP) + Skill (GSS/HSS/PSS/MCC)
+```
+
+```{r oo-plots-shown}
+clf$plot_all_metrics()
 ```
 
 ---
 
-## 5. Comparing classifiers
+## 7. Building from pre-computed hit counts
+
+When you already have cumulative hit counts (e.g. from a published TOC table),
+use `BinaryClassifier_from_hits()`:
+
+```{r from-hits}
+P <- 5; Q <- 10
+# Perfect classifier: all positives ranked before any negative
+hits_perfect <- c(0, 1, 2, 3, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5)
+clf_perfect  <- BinaryClassifier_from_hits(hits_perfect, P, Q, name = "Perfect")
+clf_perfect$mcsi   # 1
+clf_perfect$auc    # 1
+clf_perfect$aucsi  # 1
+```
+
+---
+
+## 8. Comparing classifiers
+
+`compare_classifiers()` overlays multiple classifiers on the same plot.
 
 ```{r compare}
 set.seed(1)
-clf_a <- toc_from_scores(runif(500), runif(500) > 0.4)
-clf_b <- toc_from_scores(runif(500), runif(500) > 0.5)
+td_a <- toc_from_scores(runif(500), runif(500) > 0.4)
+td_b <- toc_from_scores(runif(500) ^ 0.5, runif(500) > 0.4)
 
-compare_classifiers(list(A = clf_a, B = clf_b), type = "roc")
+compare_classifiers(list("Random" = td_a, "Better" = td_b), type = "csi")
+compare_classifiers(list("Random" = td_a, "Better" = td_b), type = "roc")
 ```
 
 ---
 
-## 6. Interactive apps
+## 9. Interactive apps
+
+Two Shiny applications allow interactive exploration:
 
 ```{r shiny, eval=FALSE}
-# Threshold slider: move k and watch metrics update live
+# Slide the threshold k and watch all metrics update in real time
 launch_threshold_explorer(td)
 
-# Explore the feasible region of AUC and AFOM for different prevalences
+# Explore how prevalence shapes the feasible region in AUC × AUCSI space
 launch_bounds_explorer()
 ```
+
+---
+
+## Summary
+
+The CSI Framework provided by **binmetrics** rests on three pillars:
+
+1. **Distinguish Agreement from Skill.** Agreement tells you how similar predictions
+   are to observations; Skill tells you whether the classifier is actually better than
+   random. These are different questions requiring different metrics.
+
+2. **Focus on the rare event.** CSI, AUCSI, and AUCSIS ignore Correct Rejections,
+   making them robust to class imbalance. OA and AUC inflate under low prevalence.
+
+3. **Analyse the full threshold range.** A single operating point hides information
+   about the soft classifier's ranking ability. The TOC and CSI curves — together
+   with their bounds and baseline — expose Quantity and Allocation disagreement
+   at every threshold.
