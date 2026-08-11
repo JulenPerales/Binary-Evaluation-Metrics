@@ -7,9 +7,9 @@
 #'
 #' @section Parametrisation:
 #' A classifier is represented by the vector of cumulative **Hit counts** at
-#' each threshold rank `k = 0, 1, …, N`:
-#' - `k = 0`: no positives predicted → Hits = 0
-#' - `k = N`: everything predicted positive → Hits = P
+#' each threshold rank `k = 0, 1, ..., N`:
+#' - `k = 0`: no positives predicted -> Hits = 0
+#' - `k = N`: everything predicted positive -> Hits = P
 #'
 #' @param hits_vector Numeric vector of length `N + 1`. Element `k+1` is the
 #'   number of Hits when the `k` highest-ranked cases are labelled positive.
@@ -140,20 +140,26 @@ print.toc_data <- function(x, ...) {
 #'
 #' Applies a metric function row-by-row to a `toc_data` object, returning a
 #' tibble with the metric value alongside the corresponding upper, lower and
-#' random bounds for the same metric.
+#' random-classifier bounds for the same metric.
 #'
 #' @param toc A `toc_data` object from [toc_data()] or [toc_from_scores()].
 #' @param metric_fn A metric function from this package (e.g. [oa()], [gss()],
 #'   [ba()]).  Must accept a `confusion_matrix` object.
 #' @param metric_name Character. Label used for the y-axis in plots.
+#' @param corresponding_agreement_metric Character. For skill metrics, the name
+#'   of the agreement metric that this skill score corrects for (e.g. `"CSI"`
+#'   for GSS, `"OA"` for HSS). Stored as a column; default `NA`.
 #' @return A tibble with columns `k`, `k_pct`, `curve`, `upper`, `lower`,
-#'   `random`, and classification (`"Agreement"` or `"Skill"`).
+#'   `type`, `metric_name`, `baseline_agreement`,
+#'   `corresponding_agreement_metric`.
 #' @export
 #' @examples
 #' td  <- toc_from_scores(runif(200), runif(200) > 0.6)
-#' oa_curve <- toc_metric_curve(td, oa, "OA")
-#' gss_curve <- toc_metric_curve(td, gss, "GSS")
-toc_metric_curve <- function(toc, metric_fn, metric_name = deparse(substitute(metric_fn))) {
+#' oa_curve  <- toc_metric_curve(td, oa,  "OA")
+#' gss_curve <- toc_metric_curve(td, gss, "GSS", corresponding_agreement_metric = "CSI")
+toc_metric_curve <- function(toc, metric_fn,
+                              metric_name = deparse(substitute(metric_fn)),
+                              corresponding_agreement_metric = NA_character_) {
   stopifnot(inherits(toc, "toc_data"))
   P <- attr(toc, "n_positive")
   Q <- attr(toc, "n_negative")
@@ -166,21 +172,25 @@ toc_metric_curve <- function(toc, metric_fn, metric_name = deparse(substitute(me
     )
   }
 
-  out <- tibble::tibble(
-    k       = toc$k,
-    k_pct   = toc$k / N,
-    curve   = mapply(apply_metric, toc$hits,        toc$fa,                    toc$misses,        toc$cr),
-    upper   = mapply(apply_metric, toc$hits_upper,  toc$k - toc$hits_upper,   P - toc$hits_upper,  Q - (toc$k - toc$hits_upper)),
-    lower   = mapply(apply_metric, toc$hits_lower,  toc$k - toc$hits_lower,   P - toc$hits_lower,  Q - (toc$k - toc$hits_lower)),
-    random  = mapply(apply_metric, toc$hits_random, toc$k - toc$hits_random,  P - toc$hits_random, Q - (toc$k - toc$hits_random))
+  curve_vals    <- mapply(apply_metric, toc$hits,        toc$fa,                   toc$misses,        toc$cr)
+  upper_vals    <- mapply(apply_metric, toc$hits_upper,  toc$k - toc$hits_upper,   P - toc$hits_upper,  Q - (toc$k - toc$hits_upper))
+  lower_vals    <- mapply(apply_metric, toc$hits_lower,  toc$k - toc$hits_lower,   P - toc$hits_lower,  Q - (toc$k - toc$hits_lower))
+  baseline_vals <- mapply(apply_metric, toc$hits_random, toc$k - toc$hits_random,  P - toc$hits_random, Q - (toc$k - toc$hits_random))
+
+  baseline_sum <- sum(baseline_vals, na.rm = TRUE)
+  type <- if (baseline_sum < 0.5) "Skill" else "Agreement"
+
+  tibble::tibble(
+    k                              = toc$k,
+    k_pct                          = toc$k / N,
+    curve                          = curve_vals,
+    upper                          = upper_vals,
+    lower                          = lower_vals,
+    type                           = type,
+    metric_name                    = metric_name,
+    baseline_agreement             = baseline_vals,
+    corresponding_agreement_metric = corresponding_agreement_metric
   )
-
-  random_sum <- sum(out$random, na.rm = TRUE)
-  type <- if (random_sum < 0.5) "Skill" else "Agreement"
-
-  out$type        <- type
-  out$metric_name <- metric_name
-  out
 }
 
 # ---------------------------------------------------------------------------

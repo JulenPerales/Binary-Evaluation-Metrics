@@ -465,34 +465,56 @@ false_alarm_ratio <- function(hits, fa = NULL, misses = NULL, cr = NULL) {
 
 #' Compute All Metrics from a Confusion Matrix
 #'
-#' Returns a named numeric vector with all agreement and skill metrics,
-#' grouped according to the CSI Framework (dissertation Chapter 1).
+#' Returns a tibble with all agreement and skill metrics grouped according to
+#' the CSI Framework (dissertation Chapter 1). Skill metrics carry two extra
+#' columns: `baseline_agreement` (the value of the corresponding agreement
+#' metric that a random classifier would achieve at the same prediction rate)
+#' and `corresponding_agreement_metric` (the name of that agreement metric).
 #'
 #' **Agreement metrics** (do not correct for chance): OA, PA, SP, FAR, UA,
 #' FOR, CSI, F1.
-#' **Skill metrics** (chance-corrected): GSS (Revised), HSS, PSS, MCC.
+#' **Skill metrics** (chance-corrected): GSS -> CSI, HSS -> OA, PSS -> PA,
+#' MCC -> OA.
 #'
 #' @param cm A `confusion_matrix` object.
-#' @return A named numeric vector.
+#' @return A tibble with columns `metric`, `type`, `value`,
+#'   `baseline_agreement`, `corresponding_agreement_metric`.
 #' @export
 #' @examples
 #' all_metrics(confusion_matrix(28, 72, 23, 2680))
 all_metrics <- function(cm) {
   stopifnot(inherits(cm, "confusion_matrix"))
-  c(
-    # Agreement metrics
-    OA    = oa(cm),
-    PA    = pa(cm),
-    SP    = sp(cm),
-    FAR   = far(cm),
-    UA    = ua(cm),
-    FOR   = for_metric(cm),
-    CSI   = csi(cm),
-    F1    = f1_score(cm),
-    # Skill metrics
-    GSS   = gss(cm),
-    HSS   = hss(cm),
-    PSS   = pss(cm),
-    MCC   = mcc(cm)
+  k <- cm$hits + cm$fa
+  P <- cm$n_positive; N <- cm$n_total; Q <- cm$n_negative
+
+  # Random baseline CSI, given the actual prediction count k (for GSS)
+  denom_csi_rand <- N * (k + P) - k * P
+  csi_rand <- if (denom_csi_rand == 0) NA_real_ else k * P / denom_csi_rand
+
+  # Random baseline OA, given k (for HSS and MCC)
+  oa_rand <- (k * P + (N - k) * Q) / N^2
+
+  # Random baseline PA = prediction rate k/N (for PSS)
+  pa_rand <- if (N == 0) NA_real_ else k / N
+
+  tibble::tibble(
+    metric = c("OA", "PA", "SP", "FAR", "UA", "FOR", "CSI", "F1",
+               "GSS", "HSS", "PSS", "MCC"),
+    type   = c(rep("Agreement", 8), rep("Skill", 4)),
+    value  = c(
+      oa(cm), pa(cm), sp(cm), far(cm), ua(cm), for_metric(cm), csi(cm), f1_score(cm),
+      gss(cm), hss(cm), pss(cm), mcc(cm)
+    ),
+    baseline_agreement = c(
+      rep(NA_real_, 8),
+      csi_rand,  # GSS: CSI for random classifier
+      oa_rand,   # HSS: OA for random classifier
+      pa_rand,   # PSS: PA for random classifier
+      oa_rand    # MCC: OA for random classifier
+    ),
+    corresponding_agreement_metric = c(
+      rep(NA_character_, 8),
+      "CSI", "OA", "PA", "OA"
+    )
   )
 }

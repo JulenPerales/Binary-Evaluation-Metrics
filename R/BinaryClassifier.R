@@ -47,13 +47,13 @@ BinaryClassifier <- R6::R6Class(
   "BinaryClassifier",
   cloneable = TRUE,
 
-  # ── Private state ──────────────────────────────────────────────────────
+  # -- Private state ----------------------------------------------------------
   private = list(
     .toc  = NULL,
     .name = NULL
   ),
 
-  # ── Active bindings ────────────────────────────────────────────────────
+  # -- Active bindings --------------------------------------------------------
   active = list(
     toc          = function() private$.toc,
     name         = function(v) {
@@ -80,7 +80,7 @@ BinaryClassifier <- R6::R6Class(
     aucprc       = function() auprc(private$.toc)
   ),
 
-  # ── Public methods ─────────────────────────────────────────────────────
+  # -- Public methods ---------------------------------------------------------
   public = list(
 
     #' @description
@@ -135,14 +135,25 @@ BinaryClassifier <- R6::R6Class(
     #' @description Full metric summary printed to the console.
     summary = function() {
       self$print()
-      cat("\n  ── Point Metrics at Optimal Threshold (MaxCSI) ─────────\n")
+      cat("\n  -- Point Metrics at Optimal Threshold (MaxCSI) ---------\n")
       cm <- self$at_threshold(mcsi_threshold(private$.toc))
-      metrics_vec <- all_metrics(cm)
-      nms <- names(metrics_vec)
-      for (i in seq_along(metrics_vec)) {
-        cat(sprintf("  %-12s  %7.4f\n", nms[i], metrics_vec[i]))
+      mdf <- all_metrics(cm)
+      cur_type <- ""
+      for (i in seq_len(nrow(mdf))) {
+        row <- mdf[i, ]
+        if (row$type != cur_type) {
+          cur_type <- row$type
+          cat(sprintf("  [%s]\n", cur_type))
+        }
+        if (row$type == "Skill" && !is.na(row$baseline_agreement)) {
+          cat(sprintf("  %-6s  %7.4f   baseline_%s = %.4f\n",
+                      row$metric, row$value,
+                      row$corresponding_agreement_metric, row$baseline_agreement))
+        } else {
+          cat(sprintf("  %-6s  %7.4f\n", row$metric, row$value))
+        }
       }
-      cat("\n  ── Integrated Metrics ───────────────────────────────────\n")
+      cat("\n  -- Integrated Metrics -------------------------------------------\n")
       int <- integrated_metrics(private$.toc)
       for (i in seq_along(int)) {
         cat(sprintf("  %-16s  %7.4f\n", names(int)[i], int[i]))
@@ -150,7 +161,7 @@ BinaryClassifier <- R6::R6Class(
       invisible(self)
     },
 
-    # ── Visualisation methods ──────────────────────────────────────────
+    # -- Visualisation methods ------------------------------------------------
 
     #' @description TOC curve (Hits vs k).
     #' @param ... Additional arguments passed to [plot_toc()].
@@ -196,15 +207,19 @@ BinaryClassifier <- R6::R6Class(
       N  <- self$n_total
 
       # Agreement metrics
-      p_oa   <- plot_metric_curve(toc_metric_curve(td, oa,    "OA"),    "OA")
-      p_csi  <- plot_metric_curve(toc_metric_curve(td, csi,   "CSI"),   "CSI")
-      p_pa   <- plot_metric_curve(toc_metric_curve(td, pa,    "PA"),    "PA")
-      p_sp   <- plot_metric_curve(toc_metric_curve(td, sp,    "SP"),    "SP")
-      # Skill metrics
-      p_gss  <- plot_metric_curve(toc_metric_curve(td, gss,   "GSS"),   "GSS (Revised)")
-      p_hss  <- plot_metric_curve(toc_metric_curve(td, hss,   "HSS"),   "HSS")
-      p_pss  <- plot_metric_curve(toc_metric_curve(td, pss,   "PSS"),   "PSS")
-      p_mcc  <- plot_metric_curve(toc_metric_curve(td, mcc,   "MCC"),   "MCC")
+      p_oa   <- plot_metric_curve(toc_metric_curve(td, oa,  "OA"),  "OA")
+      p_csi  <- plot_metric_curve(toc_metric_curve(td, csi, "CSI"), "CSI")
+      p_pa   <- plot_metric_curve(toc_metric_curve(td, pa,  "PA"),  "PA")
+      p_sp   <- plot_metric_curve(toc_metric_curve(td, sp,  "SP"),  "SP")
+      # Skill metrics (with corresponding agreement metric)
+      p_gss  <- plot_metric_curve(
+        toc_metric_curve(td, gss, "GSS", corresponding_agreement_metric = "CSI"), "GSS (Revised)")
+      p_hss  <- plot_metric_curve(
+        toc_metric_curve(td, hss, "HSS", corresponding_agreement_metric = "OA"),  "HSS")
+      p_pss  <- plot_metric_curve(
+        toc_metric_curve(td, pss, "PSS", corresponding_agreement_metric = "PA"),  "PSS")
+      p_mcc  <- plot_metric_curve(
+        toc_metric_curve(td, mcc, "MCC", corresponding_agreement_metric = "OA"),  "MCC")
 
       patchwork::wrap_plots(
         p_oa, p_csi, p_pa, p_sp,
@@ -222,7 +237,7 @@ BinaryClassifier <- R6::R6Class(
   )
 )
 
-# ── Alternative constructor from raw hit vector ─────────────────────────────
+# -- Alternative constructor from raw hit vector --------------------------------
 
 #' Create a BinaryClassifier from Pre-computed Hit Counts
 #'
