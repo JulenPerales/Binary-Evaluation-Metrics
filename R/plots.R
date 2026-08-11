@@ -29,6 +29,16 @@
   )
 }
 
+# Internal helper: add a reference point annotation from a confusion_matrix
+.add_reference_point <- function(p, x, y, label) {
+  p +
+    ggplot2::annotate("point", x = x, y = y,
+                      size = 3.5, colour = "black", shape = 19) +
+    ggplot2::annotate("text", x = x, y = y,
+                      label = label, hjust = -0.15, vjust = 0.5,
+                      size = 3.2, colour = "grey20", fontface = "bold")
+}
+
 # ---------------------------------------------------------------------------
 # plot_toc ----
 # ---------------------------------------------------------------------------
@@ -41,16 +51,27 @@
 #' @param toc A `toc_data` object.
 #' @param classifier_name Character. Legend label for the classifier curve.
 #' @param percent Logical. Scale axes as percentages of the total (default
-#'   `FALSE` — raw counts).
+#'   `FALSE` — raw counts). When `TRUE`, axes are normalised by the
+#'   classifier's own N and P.
 #' @param annotate_auc Logical. Overlay the AUC value (default `TRUE`).
+#' @param reference_cm Optional `confusion_matrix`. When supplied, the
+#'   corresponding operating point is drawn as a filled dot on the plot.
+#'   With `percent = TRUE`, coordinates use the reference cm's own N and P
+#'   for normalisation; with `percent = FALSE`, raw counts are used.
+#' @param reference_label Character. Label for the reference point
+#'   (default `"Reference"`).
 #' @return A `ggplot2` object.
 #' @export
 #' @examples
 #' set.seed(1)
 #' td <- toc_from_scores(runif(200), runif(200) > 0.5)
 #' plot_toc(td)
+#' # Overlay Finley's forecast as a reference point
+#' cm <- confusion_matrix(hits = 28, fa = 72, misses = 23, cr = 2680)
+#' plot_toc(td, percent = TRUE, reference_cm = cm, reference_label = "Finley (1884)")
 plot_toc <- function(toc, classifier_name = "Classifier",
-                     percent = FALSE, annotate_auc = TRUE) {
+                     percent = FALSE, annotate_auc = TRUE,
+                     reference_cm = NULL, reference_label = "Reference") {
   stopifnot(inherits(toc, "toc_data"))
   P  <- attr(toc, "n_positive")
   N  <- attr(toc, "n_total")
@@ -94,6 +115,15 @@ plot_toc <- function(toc, classifier_name = "Classifier",
       colour = "grey30"
     )
   }
+
+  if (!is.null(reference_cm)) {
+    stopifnot(inherits(reference_cm, "confusion_matrix"))
+    ref_N <- reference_cm$n_total
+    ref_P <- reference_cm$n_positive
+    ref_k    <- (reference_cm$hits + reference_cm$fa) / (if (percent) ref_N else 1)
+    ref_hits <- reference_cm$hits / (if (percent) ref_P else 1)
+    p <- .add_reference_point(p, ref_k, ref_hits, reference_label)
+  }
   p
 }
 
@@ -109,13 +139,22 @@ plot_toc <- function(toc, classifier_name = "Classifier",
 #' @param toc A `toc_data` object.
 #' @param classifier_name Character. Legend label.
 #' @param annotate_auc Logical. Overlay AUC value.
+#' @param reference_cm Optional `confusion_matrix`. When supplied, the
+#'   corresponding (FPR, TPR) operating point is drawn as a filled dot.
+#'   FPR and TPR are normalised rates, so the point is always on the [0,1]
+#'   scale regardless of dataset size.
+#' @param reference_label Character. Label for the reference point.
 #' @return A `ggplot2` object.
 #' @export
 #' @examples
 #' set.seed(2)
 #' td <- toc_from_scores(runif(400), runif(400) > 0.45)
 #' plot_roc(td)
-plot_roc <- function(toc, classifier_name = "Classifier", annotate_auc = TRUE) {
+#' # Overlay Finley's operating point
+#' cm <- confusion_matrix(hits = 28, fa = 72, misses = 23, cr = 2680)
+#' plot_roc(td, reference_cm = cm, reference_label = "Finley (1884)")
+plot_roc <- function(toc, classifier_name = "Classifier", annotate_auc = TRUE,
+                     reference_cm = NULL, reference_label = "Reference") {
   stopifnot(inherits(toc, "toc_data"))
 
   df_clf <- tibble::tibble(
@@ -163,6 +202,13 @@ plot_roc <- function(toc, classifier_name = "Classifier", annotate_auc = TRUE) {
       size   = 3.5, colour = "grey30"
     )
   }
+
+  if (!is.null(reference_cm)) {
+    stopifnot(inherits(reference_cm, "confusion_matrix"))
+    ref_fpr <- reference_cm$fa   / reference_cm$n_negative
+    ref_tpr <- reference_cm$hits / reference_cm$n_positive
+    p <- .add_reference_point(p, ref_fpr, ref_tpr, reference_label)
+  }
   p
 }
 
@@ -179,13 +225,22 @@ plot_roc <- function(toc, classifier_name = "Classifier", annotate_auc = TRUE) {
 #' @param toc A `toc_data` object.
 #' @param classifier_name Character. Legend label.
 #' @param percent_x Logical. Scale x-axis as percentage of N (default `TRUE`).
+#' @param reference_cm Optional `confusion_matrix`. When supplied, the
+#'   corresponding CSI operating point is drawn as a filled dot on the plot.
+#'   The x coordinate is `(H+F) / N` using the reference cm's own N; the
+#'   y coordinate is the CSI value from that cm.
+#' @param reference_label Character. Label for the reference point.
 #' @return A `ggplot2` object.
 #' @export
 #' @examples
 #' set.seed(3)
 #' td <- toc_from_scores(runif(300), runif(300) > 0.5)
 #' plot_csi(td)
-plot_csi <- function(toc, classifier_name = "Classifier", percent_x = TRUE) {
+#' # Overlay Finley's CSI as a reference point
+#' cm <- confusion_matrix(hits = 28, fa = 72, misses = 23, cr = 2680)
+#' plot_csi(td, reference_cm = cm, reference_label = "Finley (1884)")
+plot_csi <- function(toc, classifier_name = "Classifier", percent_x = TRUE,
+                     reference_cm = NULL, reference_label = "Reference") {
   stopifnot(inherits(toc, "toc_data"))
   N <- attr(toc, "n_total")
   P <- attr(toc, "n_positive")
@@ -238,6 +293,17 @@ plot_csi <- function(toc, classifier_name = "Classifier", percent_x = TRUE) {
       size  = 3.2, colour = "grey30"
     ) +
     binm_theme()
+
+  if (!is.null(reference_cm)) {
+    stopifnot(inherits(reference_cm, "confusion_matrix"))
+    ref_x <- if (percent_x) {
+      (reference_cm$hits + reference_cm$fa) / reference_cm$n_total
+    } else {
+      reference_cm$hits + reference_cm$fa
+    }
+    ref_y <- csi(reference_cm)
+    p <- .add_reference_point(p, ref_x, ref_y, reference_label)
+  }
   p
 }
 
@@ -252,8 +318,9 @@ plot_csi <- function(toc, classifier_name = "Classifier", percent_x = TRUE) {
 #' set.seed(3)
 #' td <- toc_from_scores(runif(300), runif(300) > 0.5)
 #' plot_fom(td)
-plot_fom <- function(toc, classifier_name = "Classifier", percent_x = TRUE) {
-  plot_csi(toc, classifier_name, percent_x)
+plot_fom <- function(toc, classifier_name = "Classifier", percent_x = TRUE,
+                     reference_cm = NULL, reference_label = "Reference") {
+  plot_csi(toc, classifier_name, percent_x, reference_cm, reference_label)
 }
 
 # ---------------------------------------------------------------------------
@@ -281,14 +348,13 @@ plot_metric_curve <- function(mc, ylab = mc$metric_name[1], percent_x = TRUE) {
     Classifier          = mc$curve,
     `Upper Bound`       = mc$upper,
     `Lower Bound`       = mc$lower,
-    `Random Classifier` = mc$random
+    `Random Classifier` = mc$baseline_agreement
   ) |>
     tidyr::pivot_longer(-k, names_to = "curve", values_to = "value")
 
   type <- mc$type[1]
-  base_col <- if (type == "Skill") "random" else "lower"
 
-  y_base  <- if (type == "Skill") mc$random else mc$lower
+  y_base <- if (type == "Skill") mc$baseline_agreement else mc$lower
   ar <- area_ratio(mc$k_pct, mc$curve, mc$upper, y_base)
 
   p <- ggplot2::ggplot(df, ggplot2::aes(x = k, y = value,

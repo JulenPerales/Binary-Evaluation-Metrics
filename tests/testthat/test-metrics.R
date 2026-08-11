@@ -74,25 +74,32 @@ test_that("kappa_score is correct", {
   expect_equal(kappa_score(cm), (po - pe) / (1 - pe), tolerance = 1e-6)
 })
 
-test_that("all_metrics returns named vector with CSI Framework names", {
+test_that("all_metrics returns a tibble with CSI Framework structure", {
   cm  <- confusion_matrix(28, 72, 23, 2680)
   res <- all_metrics(cm)
-  expect_true(is.numeric(res))
-  expect_named(res)
-  # CSI replaces FOM as the key name
-  expect_true("CSI" %in% names(res))
-  expect_true("OA"  %in% names(res))
-  # Agreement metrics present
-  expect_true("PA"  %in% names(res))
-  expect_true("SP"  %in% names(res))
-  expect_true("UA"  %in% names(res))
-  expect_true("FAR" %in% names(res))
-  expect_true("FOR" %in% names(res))
-  # Skill metrics present
-  expect_true("GSS" %in% names(res))
-  expect_true("HSS" %in% names(res))
-  expect_true("PSS" %in% names(res))
-  expect_true("MCC" %in% names(res))
+  expect_s3_class(res, "data.frame")
+  # Core columns present
+  expect_true(all(c("metric", "type", "value",
+                     "baseline_agreement", "corresponding_agreement_metric") %in% names(res)))
+  # All expected metrics present
+  expect_true(all(c("OA","PA","SP","FAR","UA","FOR","CSI","F1",
+                     "GSS","HSS","PSS","MCC") %in% res$metric))
+  # Agreement vs Skill classification
+  agreement <- res[res$type == "Agreement", ]
+  skill     <- res[res$type == "Skill", ]
+  expect_equal(nrow(agreement), 8)
+  expect_equal(nrow(skill), 4)
+  # Skill metrics have baseline_agreement and corresponding metric
+  expect_true(all(!is.na(skill$baseline_agreement)))
+  expect_true(all(!is.na(skill$corresponding_agreement_metric)))
+  expect_equal(skill$corresponding_agreement_metric,
+               c("CSI", "OA", "PA", "OA"))
+  # Agreement metrics have NA baselines
+  expect_true(all(is.na(agreement$baseline_agreement)))
+  # baseline_agreement is last numeric column (before corresponding_agreement_metric)
+  col_idx_base  <- which(names(res) == "baseline_agreement")
+  col_idx_corr  <- which(names(res) == "corresponding_agreement_metric")
+  expect_equal(col_idx_corr, col_idx_base + 1L)
 })
 
 test_that("perfect classifier has FOM = OA = 1", {

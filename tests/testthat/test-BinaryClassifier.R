@@ -65,6 +65,6 @@ test_that("compute_metric_curve returns expected structure", {
   clf <- BinaryClassifier$new(runif(80), runif(80) > 0.45)
   mc  <- clf$compute_metric_curve(oa, "OA")
   expect_true(is.data.frame(mc))
-  expect_true(all(c("k", "k_pct", "curve", "upper", "lower", "random") %in% names(mc)))
+  expect_true(all(c("k", "k_pct", "curve", "upper", "lower", "baseline_agreement") %in% names(mc)))
   expect_equal(nrow(mc), clf$n_total + 1)
 })
